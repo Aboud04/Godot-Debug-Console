@@ -291,6 +291,6 @@ How this feature could be tested
 Contributors will be recognized in:
 - **README.md** - Contributors section
 - **Release notes** - For significant contributions
-- **GitHub contributors** - Automatic recognition
+- **GitHub contributors** - automatic
 
 Thank you for contributing to the Debug Console addon! 
