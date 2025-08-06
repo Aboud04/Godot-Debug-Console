@@ -1,0 +1,54 @@
+[gd_scene load_steps=2 format=3 uid="uid://bux31q5461njr"]
+
+[ext_resource type="Script" uid="uid://bxbyin1hw2ciu" path="res://addons/debug_console/game/GameConsole.gd" id="1_2x3yz"]
+
+[node name="GameConsole" type="Control"]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 400.0
+grow_horizontal = 2
+script = ExtResource("1_2x3yz")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.85098)
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="OutputText" type="RichTextLabel" parent="VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+bbcode_enabled = true
+scroll_following = true
+selection_enabled = true
+
+[node name="InputContainer" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+
+[node name="InputLine" type="LineEdit" parent="VBox/InputContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter command... (F12 or Esc to close)"
+
+[node name="CloseButton" type="Button" parent="VBox/InputContainer"]
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+tooltip_text = "Close console (F12 or Esc)"
+text = "✕"

@@ -1,0 +1,66 @@
+[gd_scene load_steps=2 format=3 uid="uid://oc472iwuviqo"]
+
+[ext_resource type="Script" uid="uid://bj2fg3l0yw5a8" path="res://addons/debug_console/editor/EditorConsole.gd" id="1_8x2yz"]
+
+[node name="EditorConsole" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_8x2yz")
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HeaderPanel" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 0
+
+[node name="TitleLabel" type="Label" parent="VBox/HeaderPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Debug Console"
+vertical_alignment = 1
+
+[node name="OutputPanel" type="Panel" parent="VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="OutputText" type="RichTextLabel" parent="VBox/OutputPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 4.0
+offset_right = -4.0
+offset_bottom = -4.0
+grow_horizontal = 2
+grow_vertical = 2
+bbcode_enabled = true
+scroll_following = true
+selection_enabled = true
+
+[node name="InputPanel" type="HBoxContainer" parent="VBox"]
+layout_mode = 2
+
+[node name="InputLine" type="LineEdit" parent="VBox/InputPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter command..."
+
+[node name="SendButton" type="Button" parent="VBox/InputPanel"]
+layout_mode = 2
+text = "Send"
+
+[node name="ClearButton" type="Button" parent="VBox/InputPanel"]
+layout_mode = 2
+text = "Clear"
