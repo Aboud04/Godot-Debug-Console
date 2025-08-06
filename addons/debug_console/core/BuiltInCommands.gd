@@ -413,4 +413,3 @@ func _set_time_scale(args: Array) -> String:
 	return "Time scale set to: %.2f" % scale
 
 #endregion
-

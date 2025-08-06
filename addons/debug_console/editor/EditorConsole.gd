@@ -85,7 +85,7 @@ func clear_output():
 
 func _get_level_color(level: DebugCore.LogLevel) -> String:
 	match level:
-		DebugCore.LogLevel.INFO: return "#FFFFFF"
+		DebugCore.LogLevel.INFO: return "#808080"
 		DebugCore.LogLevel.WARNING: return "#FFAA00"
 		DebugCore.LogLevel.ERROR: return "#FF4444"
 		DebugCore.LogLevel.SUCCESS: return "#44FF44"
