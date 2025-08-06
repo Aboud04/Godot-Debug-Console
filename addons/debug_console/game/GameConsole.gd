@@ -114,6 +114,7 @@ func _execute_command(command: String):
 		add_log_message(result, DebugCore.LogLevel.INFO)
 	
 	input_line.clear()
+	input_line.grab_focus()
 
 func add_log_message(message: String, level: DebugCore.LogLevel = DebugCore.LogLevel.INFO):
 	if not output_text:
