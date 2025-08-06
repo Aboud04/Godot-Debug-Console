@@ -16,31 +16,24 @@ var target_height: float = 400.0
 func _ready():
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
 	
-	# Setup UI
 	_setup_ui()
 	
-	# Connect signals
 	input_line.text_submitted.connect(_on_command_submitted)
 	close_button.pressed.connect(hide_console)
 	
-	# Setup initial state
 	custom_minimum_size.y = 0
 	size.y = 0
 	
 	add_log_message("Game Debug Console Ready - Press F12 or Ctrl+` to toggle", DebugCore.LogLevel.SUCCESS)
 
 func _setup_ui():
-	# Setup background
 	background.color = Color(0, 0, 0, 0.85)
 	
-	# Setup output
 	output_text.bbcode_enabled = true
 	output_text.scroll_following = true
 	
-	# Setup input
 	input_line.placeholder_text = "Enter command... (F12 to close)"
 	
-	# Setup close button
 	close_button.text = "×"
 	close_button.custom_minimum_size = Vector2(30, 30)
 
@@ -109,19 +102,15 @@ func _execute_command(command: String):
 	if command.strip_edges().is_empty():
 		return
 	
-	# Add to history
 	command_history.append(command)
 	history_index = command_history.size()
 	
-	# Show command in output
 	add_log_message("> " + command, DebugCore.LogLevel.INFO)
 	
-	# Execute and show result
 	var result = CommandRegistry.execute_command(command)
 	if not result.is_empty():
 		add_log_message(result, DebugCore.LogLevel.INFO)
 	
-	# Clear input
 	input_line.clear()
 
 func add_log_message(message: String, level: DebugCore.LogLevel = DebugCore.LogLevel.INFO):

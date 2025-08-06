@@ -242,7 +242,6 @@ func test(test_name: String, test_function: Callable):
 	var message = ""
 	var error_info = ""
 	
-	# Execute test with error handling
 	var test_result = _execute_test_safely(test_function)
 	passed = test_result.passed
 	message = test_result.message
@@ -274,13 +273,10 @@ func test(test_name: String, test_function: Callable):
 func _execute_test_safely(test_function: Callable) -> Dictionary:
 	var result = {"passed": false, "message": "FAIL", "error_info": ""}
 	
-	# Execute test with simple error handling
 	var test_result = null
 	
-	# Try to execute the test
 	test_result = test_function.call()
 	
-	# Check result
 	if test_result is bool:
 		result.passed = test_result
 		result.message = "PASS" if test_result else "FAIL"

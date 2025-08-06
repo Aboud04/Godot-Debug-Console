@@ -31,14 +31,9 @@ func _add_toggle_shortcut():
 	toggle_shortcut.keycode = KEY_QUOTELEFT
 	toggle_shortcut.ctrl_pressed = true
 	
-	var focus_shortcut = InputEventKey.new()
-	focus_shortcut.keycode = KEY_C
-	focus_shortcut.alt_pressed = true
-	
 	if not InputMap.has_action("toggle_debug_console"):
 		InputMap.add_action("toggle_debug_console")
 		InputMap.action_add_event("toggle_debug_console", toggle_shortcut)
-	
 
 func _input(event):
 	if not Engine.is_editor_hint():
@@ -47,17 +42,14 @@ func _input(event):
 	if event.is_action_pressed("toggle_debug_console"):
 		toggle_console()
 
-func _unhandled_input(event):
-	if not Engine.is_editor_hint():
-		return
-	
-
 func toggle_console():
 	if not editor_console_panel:
 		return
 	
-	if console_visible: hide_console()
-	else: show_console()
+	if console_visible:
+		hide_console()
+	else:
+		show_console()
 
 func show_console():
 	if not editor_console_panel or console_visible:

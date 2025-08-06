@@ -11,7 +11,6 @@ func _ready():
 	
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
 	
-	# Check if console should be enabled
 	is_console_enabled = _should_enable_console()
 	
 	if is_console_enabled:
@@ -25,10 +24,8 @@ func _should_enable_console() -> bool:
 	)
 
 func _create_console():
-	# Create console instance
 	console_instance = GAME_CONSOLE_SCENE.instantiate()
 	
-	# Add to a high-priority CanvasLayer
 	var canvas_layer = CanvasLayer.new()
 	canvas_layer.name = "DebugConsoleLayer"
 	canvas_layer.layer = 1000
@@ -39,10 +36,8 @@ func _create_console():
 	
 	console_instance.visible = false
 	
-	# Initialize debug system
 	DebugCore.initialize_for_game(console_instance)
 	
-	# Create and store builtin commands instance
 	builtin_commands = preload("res://addons/debug_console/core/BuiltInCommands.gd").new()
 	builtin_commands.register_game_commands()
 
@@ -51,7 +46,6 @@ func _input(event):
 		return
 	
 	if event is InputEventKey and event.pressed and not event.echo:
-		# Toggle with F12 or Ctrl+`
 		if event.keycode == KEY_F12 or (event.keycode == KEY_QUOTELEFT and event.ctrl_pressed):
 			toggle_console()
 			get_viewport().set_input_as_handled()

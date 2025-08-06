@@ -13,7 +13,6 @@ var max_history_size: int = 1000
 func _ready():
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
 
-# Editor initialization
 func initialize_for_editor(console_dock):
 	editor_output = console_dock
 	Log("Debug system initialized for editor", LogLevel.SUCCESS)
@@ -21,7 +20,6 @@ func initialize_for_editor(console_dock):
 func cleanup_editor():
 	editor_output = null
 
-# Game initialization
 func initialize_for_game(console_instance):
 	game_output = console_instance
 	Log("Debug system initialized for game", LogLevel.SUCCESS)
@@ -29,18 +27,16 @@ func initialize_for_game(console_instance):
 func cleanup_game():
 	game_output = null
 
-# Logging functions
 func Log(message: String, level: LogLevel = LogLevel.INFO):
 	var formatted_msg = _format_message(message, level)
 	_add_to_history(formatted_msg)
 	
-	# Output to appropriate console
 	if Engine.is_editor_hint() and editor_output:
 		editor_output.add_log_message(formatted_msg, level)
 	elif not Engine.is_editor_hint() and game_output:
 		game_output.add_log_message(formatted_msg, level)
 	else:
-		print(formatted_msg)  # Fallback
+		print(formatted_msg)
 	
 	message_logged.emit(formatted_msg, LogLevel.keys()[level])
 

@@ -118,7 +118,6 @@ func _change_directory(args: Array) -> String:
 	var new_path = current_directory
 	
 	if target_dir == "..":
-		# Go up one directory
 		if current_directory == "res://":
 			return "Already at root directory"
 		var parent = current_directory.get_base_dir()
@@ -130,7 +129,6 @@ func _change_directory(args: Array) -> String:
 	elif target_dir == "/":
 		new_path = "res://"
 	else:
-		# Change to specific directory
 		if target_dir.begins_with("/"):
 			new_path = "res://" + target_dir.substr(1)
 		else:
@@ -245,8 +243,7 @@ func _create_script(args: Array) -> String:
 	var extends_type = args[1] if args.size() > 1 else "Node"
 	var classname = args[2] if args.size() > 2 else file_name.get_basename().capitalize().replace(" ", "")
 	
-	# Validate extends type
-	var valid_types = ["Node", "Node2D", "Node3D", "Control", "CanvasItem", "CanvasLayer", "Viewport", "Window", "SubViewport", "Area2D", "Area3D", "CollisionShape2D", "CollisionShape3D", "Sprite2D", "Sprite3D", "Label", "Button", "LineEdit", "TextEdit", "RichTextLabel", "Panel", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "MarginContainer", "ScrollContainer", "TabContainer", "SplitContainer", "AspectRatioContainer", "TextureRect", "ColorRect", "NinePatchRect", "ProgressBar", "Slider", "SpinBox", "CheckBox", "CheckButton", "OptionButton", "ItemList", "Tree", "TreeItem", "FileDialog", "ColorPicker", "ColorPickerButton", "MenuButton", "PopupMenu", "MenuBar", "ToolButton", "LinkButton", "TextureButton", "TextureProgressBar", "AnimationPlayer", "AnimationTree", "Tween", "Timer", "Camera2D", "Camera3D", "Light2D", "Light3D", "AudioStreamPlayer", "AudioStreamPlayer2D", "AudioStreamPlayer3D", "AudioListener2D", "AudioListener3D", "RigidBody2D", "RigidBody3D", "CharacterBody2D", "CharacterBody3D", "StaticBody2D", "StaticBody3D", "KinematicBody2D", "KinematicBody3D", "Path2D", "Path3D", "NavigationAgent2D", "NavigationAgent3D", "NavigationRegion2D", "NavigationRegion3D", "NavigationPolygon", "NavigationMesh", "NavigationLink2D", "NavigationLink3D", "NavigationObstacle2D", "NavigationObstacle3D", "NavigationPathQueryParameters2D", "NavigationPathQueryParameters3D", "NavigationPathQueryResult2D", "NavigationPathQueryResult3D", "NavigationMeshSourceGeometry2D", "NavigationMeshSourceGeometry3D", "NavigationMeshSourceGeometryData2D", "NavigationMeshSourceGeometryData3D", "NavigationPolygon", "NavigationMesh", "NavigationRegion2D", "NavigationRegion3D", "NavigationLink2D", "NavigationLink3D", "NavigationObstacle2D", "NavigationObstacle3D", "NavigationPathQueryParameters2D", "NavigationPathQueryParameters3D", "NavigationPathQueryResult2D", "NavigationPathQueryResult3D", "NavigationMeshSourceGeometry2D", "NavigationMeshSourceGeometry3D", "NavigationMeshSourceGeometryData2D", "NavigationMeshSourceGeometryData3D"]
+	var valid_types = ["Node", "Node2D", "Node3D", "Control", "CanvasItem", "CanvasLayer", "Viewport", "Window", "SubViewport", "Area2D", "Area3D", "CollisionShape2D", "CollisionShape3D", "Sprite2D", "Sprite3D", "Label", "Button", "LineEdit", "TextEdit", "RichTextLabel", "Panel", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "MarginContainer", "ScrollContainer", "TabContainer", "SplitContainer", "AspectRatioContainer", "TextureRect", "ColorRect", "NinePatchRect", "ProgressBar", "Slider", "SpinBox", "CheckBox", "CheckButton", "OptionButton", "ItemList", "Tree", "TreeItem", "FileDialog", "ColorPicker", "ColorPickerButton", "MenuButton", "PopupMenu", "MenuBar", "ToolButton", "LinkButton", "TextureButton", "TextureProgressBar", "AnimationPlayer", "AnimationTree", "Tween", "Timer", "Camera2D", "Camera3D", "Light2D", "Light3D", "AudioStreamPlayer", "AudioStreamPlayer2D", "AudioStreamPlayer3D", "AudioListener2D", "AudioListener3D", "RigidBody2D", "RigidBody3D", "CharacterBody2D", "CharacterBody3D", "StaticBody2D", "StaticBody3D", "KinematicBody2D", "KinematicBody3D", "Path2D", "Path3D", "NavigationAgent2D", "NavigationAgent3D", "NavigationRegion2D", "NavigationRegion3D", "NavigationPolygon", "NavigationMesh", "NavigationLink2D", "NavigationLink3D", "NavigationObstacle2D", "NavigationObstacle3D", "NavigationPathQueryParameters2D", "NavigationPathQueryParameters3D", "NavigationPathQueryResult2D", "NavigationPathQueryResult3D", "NavigationMeshSourceGeometry2D", "NavigationMeshSourceGeometry3D", "NavigationMeshSourceGeometryData2D", "NavigationMeshSourceGeometryData3D"]
 	
 	if not valid_types.has(extends_type):
 		return "Error: Invalid extends type '%s'. Use: %s" % [extends_type, ", ".join(valid_types.slice(0, 10)) + "..."]
@@ -284,12 +281,10 @@ func _create_scene(args: Array) -> String:
 	var script_name = file_name.replace(".tscn", ".gd")
 	var classname = file_name.get_basename().capitalize().replace(" ", "")
 	
-	# Create the script file using existing function
 	var script_result = _create_script([script_name.get_basename(), root_type, classname])
 	if not script_result.contains("Created script"):
 		return "Error: " + script_result
 	
-	# Create the scene file
 	var scene_content = """[gd_scene load_steps=2 format=3 uid="uid://bqxvj6y5n8q8p"]
 
 [ext_resource type="Script" path="res://%s" id="1_0"]
@@ -352,7 +347,6 @@ func _run_tests(args: Array) -> String:
 	var test_framework = TestFramework.new()
 	test_framework.run_all_tests()
 	
-	# Reset console by re-registering all commands
 	register_editor_commands()
 	
 	return "Tests completed. Console reset. Check console for results."
@@ -361,7 +355,6 @@ func _test_commands(args: Array) -> String:
 	var test_framework = TestFramework.new()
 	test_framework.run_command_tests()
 	
-	# Reset console by re-registering all commands
 	register_editor_commands()
 	
 	return "Command tests completed. Console reset. Check console for results."
@@ -370,7 +363,6 @@ func _test_autocomplete(args: Array) -> String:
 	var test_framework = TestFramework.new()
 	test_framework.run_autocomplete_tests()
 	
-	# Reset console by re-registering all commands
 	register_editor_commands()
 	
 	return "Autocomplete tests completed. Console reset. Check console for results."
@@ -379,13 +371,9 @@ func _test_file_operations(args: Array) -> String:
 	var test_framework = TestFramework.new()
 	test_framework.run_file_operation_tests()
 	
-	# Reset console by re-registering all commands
 	register_editor_commands()
 	
 	return "File operation tests completed. Console reset. Check console for results."
-
-func _test_helper(args: Array) -> String:
-	return "test_helper called with: " + ",".join(args)
 
 func _quick_test(args: Array) -> String:
 	var test_framework = TestFramework.new()
@@ -425,3 +413,4 @@ func _set_time_scale(args: Array) -> String:
 	return "Time scale set to: %.2f" % scale
 
 #endregion
+

@@ -7,7 +7,6 @@ class_name EditorConsole
 @onready var send_button: Button = $VBox/InputPanel/SendButton
 @onready var clear_button: Button = $VBox/InputPanel/ClearButton
 
-
 var command_history: Array[String] = []
 var history_index: int = -1
 var max_output_lines: int = 1000
@@ -16,7 +15,7 @@ var current_autocomplete_options: Array[String] = []
 
 var _last_autocomplete_word: String = ""
 var _matching_commands: Array[String] = []
-var _autocomplete_mode: String = "commands" 
+var _autocomplete_mode: String = "commands"
 
 func _ready():
 	if not Engine.is_editor_hint():
@@ -29,22 +28,17 @@ func _ready():
 	send_button.pressed.connect(_on_send_pressed)
 	clear_button.pressed.connect(_on_clear_pressed)
 	
-	
 	output_text.focus_mode = Control.FOCUS_NONE
 	output_text.bbcode_enabled = true
 	output_text.scroll_following = true
 	
 	add_log_message("Editor Debug Console Ready", DebugCore.LogLevel.SUCCESS)
 
-
-
 func _on_send_pressed():
 	_execute_command(input_line.text)
 
 func _on_clear_pressed():
 	clear_output()
-
-
 
 func _execute_command(command: String):
 	if command.strip_edges().is_empty():
@@ -82,14 +76,12 @@ func add_log_message(message: String, level: DebugCore.LogLevel = DebugCore.LogL
 		for line in trimmed:
 			output_text.append_text(line + "\n")
 	
-	
 	if input_line and not input_line.has_focus():
 		input_line.grab_focus()
 
 func clear_output():
 	if output_text:
 		output_text.clear()
-		
 
 func _get_level_color(level: DebugCore.LogLevel) -> String:
 	match level:
@@ -127,10 +119,6 @@ func _navigate_history(direction: int):
 	else:
 		input_line.clear()
 
-func _refocus_input():
-	if input_line:
-		input_line.grab_focus()
-
 func _on_input_text_changed(new_text: String):
 	var caret_pos = input_line.caret_column
 	var word_start = caret_pos
@@ -139,15 +127,15 @@ func _on_input_text_changed(new_text: String):
 	
 	var current_word = new_text.substr(word_start, caret_pos - word_start)
 	
-	# Only reset if the word actually changed (not just autocomplete replacement)
 	if current_word != _last_autocomplete_word:
 		autocomplete_index = -1
 		_last_autocomplete_word = ""
 		_matching_commands.clear()
 
 func _autocomplete():
-	if input_line.text == "": 
-		return 
+	if input_line.text == "":
+		return
+	
 	var current_text = input_line.text
 	var caret_pos = input_line.caret_column
 	
@@ -157,7 +145,6 @@ func _autocomplete():
 	
 	var current_word = current_text.substr(word_start, caret_pos - word_start)
 	
-
 	var mode = _determine_autocomplete_mode(current_text, caret_pos)
 	
 	if autocomplete_index == -1:
@@ -191,12 +178,9 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	
 	var command = parts[0].to_lower()
 	
-	if command in  ["new_script", "new_scene"] and parts.size() >= 2:
+	if command in ["new_script", "new_scene"] and parts.size() >= 2:
 		return "node_types"
 	
-
-		
-	# Check if we're in a command that expects files
 	if command in ["ls", "cd", "rm", "mv", "cp", "touch", "open", "new_resource"]:
 		return "files"
 	
