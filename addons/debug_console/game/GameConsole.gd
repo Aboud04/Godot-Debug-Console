@@ -21,10 +21,12 @@ func _ready():
 	input_line.text_submitted.connect(_on_command_submitted)
 	close_button.pressed.connect(hide_console)
 	
-	custom_minimum_size.y = 0
-	size.y = 0
+	call_deferred("_set_initial_size")
 	
-	add_log_message("Game Debug Console Ready - Press F12 or Ctrl+` to toggle", DebugCore.LogLevel.SUCCESS)
+
+func _set_initial_size():
+	custom_minimum_size.y = 0
+	set_deferred("size.y", 0)
 
 func _setup_ui():
 	background.color = Color(0, 0, 0, 0.85)
@@ -126,7 +128,7 @@ func clear_output():
 
 func _get_level_color(level: DebugCore.LogLevel) -> String:
 	match level:
-		DebugCore.LogLevel.INFO: return "#FFFFFF"
+		DebugCore.LogLevel.INFO: return "#808080"
 		DebugCore.LogLevel.WARNING: return "#FFAA00"
 		DebugCore.LogLevel.ERROR: return "#FF4444"
 		DebugCore.LogLevel.SUCCESS: return "#44FF44"

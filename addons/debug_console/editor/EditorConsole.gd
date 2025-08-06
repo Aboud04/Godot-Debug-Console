@@ -154,6 +154,8 @@ func _autocomplete():
 		match mode:
 			"commands":
 				_get_command_suggestions(current_word)
+			"directories":
+				_get_directory_suggestions(current_word)
 			"files":
 				_get_file_suggestions(current_word)
 			"node_types":
@@ -178,10 +180,22 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	
 	var command = parts[0].to_lower()
 	
-	if command in ["new_script", "new_scene"] and parts.size() >= 2:
-		return "node_types"
+	if command in ["new_script", "new_scene", "new_resource"]:
+		if parts.size() >= 2:
+			if command in ["new_script", "new_scene"]:
+				return "node_types"
+			else:
+				return "files"
+		else:
+			return "directories"
 	
-	if command in ["ls", "cd", "rm", "mv", "cp", "touch", "open", "new_resource"]:
+	if command == "cd":
+		return "directories"
+	
+	if command == "mkdir":
+		return "directories"
+	
+	if command in ["ls", "rm", "mv", "cp", "touch", "open"]:
 		return "files"
 	
 	return "commands"
@@ -197,7 +211,40 @@ func _get_command_suggestions(current_word: String):
 	_last_autocomplete_word = current_word
 
 func _get_file_suggestions(current_word: String):
-	var dir = DirAccess.open("res://")
+	var current_dir = BuiltInCommands.get_current_directory()
+	
+	# Handle partial paths (e.g., "addons/debug" should suggest "addons/debug_console")
+	if current_word.contains("/"):
+		var path_parts = current_word.split("/")
+		var partial_path = "/".join(path_parts.slice(0, -1))
+		var search_term = path_parts[-1]
+		
+		var base_path = current_dir
+		if partial_path != "":
+			base_path = current_dir.path_join(partial_path)
+		
+		var dir = DirAccess.open(base_path)
+		if not dir:
+			_matching_commands = []
+			return
+		
+		var files: Array[String] = []
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		
+		while file_name != "":
+			if not file_name.begins_with(".") and file_name.begins_with(search_term):
+				var full_path = partial_path + "/" + file_name if partial_path != "" else file_name
+				files.append(full_path)
+			file_name = dir.get_next()
+		
+		dir.list_dir_end()
+		files.sort()
+		_matching_commands = files
+		_last_autocomplete_word = current_word
+		return
+
+	var dir = DirAccess.open(current_dir)
 	if not dir:
 		_matching_commands = []
 		return
@@ -214,6 +261,60 @@ func _get_file_suggestions(current_word: String):
 	dir.list_dir_end()
 	files.sort()
 	_matching_commands = files
+	_last_autocomplete_word = current_word
+
+func _get_directory_suggestions(current_word: String):
+	var current_dir = BuiltInCommands.get_current_directory()
+	
+	if current_word.contains("/"):
+		var path_parts = current_word.split("/")
+		var partial_path = "/".join(path_parts.slice(0, -1))
+		var search_term = path_parts[-1]
+		
+		var base_path = current_dir
+		if partial_path != "":
+			base_path = current_dir.path_join(partial_path)
+		
+		var dir = DirAccess.open(base_path)
+		if not dir:
+			_matching_commands = []
+			return
+		
+		var directories: Array[String] = []
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		
+		while file_name != "":
+			if not file_name.begins_with(".") and file_name.begins_with(search_term):
+				if dir.current_is_dir():
+					var full_path = partial_path + "/" + file_name if partial_path != "" else file_name
+					directories.append(full_path)
+			file_name = dir.get_next()
+		
+		dir.list_dir_end()
+		directories.sort()
+		_matching_commands = directories
+		_last_autocomplete_word = current_word
+		return
+	
+	var dir = DirAccess.open(current_dir)
+	if not dir:
+		_matching_commands = []
+		return
+	
+	var directories: Array[String] = []
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	
+	while file_name != "":
+		if not file_name.begins_with(".") and file_name.begins_with(current_word):
+			if dir.current_is_dir():
+				directories.append(file_name)
+		file_name = dir.get_next()
+	
+	dir.list_dir_end()
+	directories.sort()
+	_matching_commands = directories
 	_last_autocomplete_word = current_word
 
 func _get_node_type_suggestions(current_word: String):

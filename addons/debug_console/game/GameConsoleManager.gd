@@ -14,7 +14,7 @@ func _ready():
 	is_console_enabled = _should_enable_console()
 	
 	if is_console_enabled:
-		_create_console()
+		call_deferred("_create_console")
 
 func _should_enable_console() -> bool:
 	return (

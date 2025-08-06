@@ -2,16 +2,11 @@
 class_name BuiltInCommands extends RefCounted
 
 func register_editor_commands():
-	CommandRegistry.register_command("help", _help, "Show available commands", "both")
-	CommandRegistry.register_command("clear", _clear, "Clear console output", "both")
-	CommandRegistry.register_command("echo", _echo, "Echo text back", "both")
-	CommandRegistry.register_command("history", _history, "Show command history", "both")
+	register_universal_commands()
 	
-	# Editor-specific commands
 	CommandRegistry.register_command("scene", _get_current_scene, "Get current scene info", "editor")
 	CommandRegistry.register_command("reload", _reload_scene, "Reload current scene", "editor")
 	
-	# File system commands
 	CommandRegistry.register_command("ls", _list_files, "List files in current directory", "editor")
 	CommandRegistry.register_command("cd", _change_directory, "Change directory", "editor")
 	CommandRegistry.register_command("pwd", _print_working_directory, "Print current working directory", "editor")
@@ -21,14 +16,12 @@ func register_editor_commands():
 	CommandRegistry.register_command("mv", _move_file, "Move/rename file", "editor")
 	CommandRegistry.register_command("cp", _copy_file, "Copy file", "editor")
 	
-	# Godot resource commands
 	CommandRegistry.register_command("new_script", _create_script, "Create new script file", "editor")
 	CommandRegistry.register_command("new_scene", _create_scene, "Create new scene file", "editor")
 	CommandRegistry.register_command("new_resource", _create_resource, "Create new resource file", "editor")
 	CommandRegistry.register_command("open", _open_file, "Open file in editor", "editor")
 	CommandRegistry.register_command("node_types", _list_node_types, "List available node types for extends", "editor")
 	
-	# Testing commands
 	CommandRegistry.register_command("test", _run_tests, "Run all tests", "editor")
 	CommandRegistry.register_command("test_commands", _test_commands, "Test command functionality", "editor")
 	CommandRegistry.register_command("test_autocomplete", _test_autocomplete, "Test autocomplete functionality", "editor")
@@ -36,10 +29,18 @@ func register_editor_commands():
 	CommandRegistry.register_command("quick_test", _quick_test, "Run quick test", "editor")
 
 func register_game_commands():
+	register_universal_commands()
+	
 	CommandRegistry.register_command("fps", _show_fps, "Show FPS information", "game")
 	CommandRegistry.register_command("nodes", _count_nodes, "Count nodes in scene tree", "game")
 	CommandRegistry.register_command("pause", _toggle_pause, "Toggle game pause", "game")
 	CommandRegistry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
+
+func register_universal_commands():
+	CommandRegistry.register_command("help", _help, "Show available commands", "both")
+	CommandRegistry.register_command("clear", _clear, "Clear console output", "both")
+	CommandRegistry.register_command("echo", _echo, "Echo text back", "both")
+	CommandRegistry.register_command("history", _history, "Show command history", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -88,8 +89,18 @@ func _reload_scene(args: Array) -> String:
 	EditorInterface.reload_scene_from_path(EditorInterface.get_edited_scene_root().scene_file_path)
 	return "Scene reloaded"
 
+#endregion
+
 #region File system commands
 var current_directory: String = "res://"
+
+static var global_current_directory: String = "res://"
+
+static func get_current_directory() -> String:
+	return global_current_directory
+
+static func set_current_directory(path: String):
+	global_current_directory = path
 
 func _list_files(args: Array) -> String:
 	var dir = DirAccess.open(current_directory)
@@ -136,6 +147,7 @@ func _change_directory(args: Array) -> String:
 	
 	if DirAccess.dir_exists_absolute(new_path):
 		current_directory = new_path
+		set_current_directory(new_path)
 		return "Changed to: %s" % current_directory
 	else:
 		return "Error: Directory not found"
@@ -341,6 +353,7 @@ func _list_node_types(args: Array) -> String:
 	var valid_types = ["Node", "Node2D", "Node3D", "Control", "CanvasItem", "CanvasLayer", "Viewport", "Window", "SubViewport", "Area2D", "Area3D", "CollisionShape2D", "CollisionShape3D", "Sprite2D", "Sprite3D", "Label", "Button", "LineEdit", "TextEdit", "RichTextLabel", "Panel", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "MarginContainer", "ScrollContainer", "TabContainer", "SplitContainer", "AspectRatioContainer", "TextureRect", "ColorRect", "NinePatchRect", "ProgressBar", "Slider", "SpinBox", "CheckBox", "CheckButton", "OptionButton", "ItemList", "Tree", "TreeItem", "FileDialog", "ColorPicker", "ColorPickerButton", "MenuButton", "PopupMenu", "MenuBar", "ToolButton", "LinkButton", "TextureButton", "TextureProgressBar", "AnimationPlayer", "AnimationTree", "Tween", "Timer", "Camera2D", "Camera3D", "Light2D", "Light3D", "AudioStreamPlayer", "AudioStreamPlayer2D", "AudioStreamPlayer3D", "AudioListener2D", "AudioListener3D", "RigidBody2D", "RigidBody3D", "CharacterBody2D", "CharacterBody3D", "StaticBody2D", "StaticBody3D", "KinematicBody2D", "KinematicBody3D", "Path2D", "Path3D", "NavigationAgent2D", "NavigationAgent3D", "NavigationRegion2D", "NavigationRegion3D", "NavigationPolygon", "NavigationMesh", "NavigationLink2D", "NavigationLink3D", "NavigationObstacle2D", "NavigationObstacle3D", "NavigationPathQueryParameters2D", "NavigationPathQueryParameters3D", "NavigationPathQueryResult2D", "NavigationPathQueryResult3D", "NavigationMeshSourceGeometry2D", "NavigationMeshSourceGeometry3D", "NavigationMeshSourceGeometryData2D", "NavigationMeshSourceGeometryData3D"]
 	
 	return "Available node types:\n" + "\n".join(valid_types)
+#endregion
 
 #region Testing commands
 func _run_tests(args: Array) -> String:
