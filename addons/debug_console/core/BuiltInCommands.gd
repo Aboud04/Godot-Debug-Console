@@ -113,13 +113,40 @@ func _list_files(args: Array) -> String:
 	
 	while file_name != "":
 		if not file_name.begins_with("."):
-			var icon = "📁" if dir.current_is_dir() else "📄"
-			files.append("%s %s" % [icon, file_name])
+			var colored_name = _get_colored_filename(file_name, dir.current_is_dir())
+			files.append(colored_name)
 		file_name = dir.get_next()
 	
 	dir.list_dir_end()
 	files.sort()
-	return "Files in %s:\n%s" % [current_directory, "\n".join(files)]
+	return "Files in %s:\n%s" % [current_directory, "\t".join(files)]
+
+func _get_colored_filename(filename: String, is_dir: bool) -> String:
+	if is_dir:
+		return "[color=#4A90E2]📁 %s[/color]" % filename  
+	var extension = filename.get_extension().to_lower()
+	if extension in ["gd", "cs", "py", "sh", "bat", "exe"]:
+		return "[color=#50C878]📄 %s[/color]" % filename 
+	elif extension in ["zip", "tar", "gz", "rar", "7z", "bz2", "xz"]:
+		return "[color=#FF6B6B]📦 %s[/color]" % filename
+	elif extension in ["png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "ico", "tiff"]:
+		return "[color=#FF69B4]🖼️ %s[/color]" % filename  
+	elif extension in ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"]:
+		return "[color=#40E0D0]🎵 %s[/color]" % filename  
+	elif extension in ["mp4", "avi", "mkv", "mov", "wmv", "flv", "webm", "ogv"]:
+		return "[color=#FFD700]🎬 %s[/color]" % filename  
+	elif extension in ["tscn", "tres", "godot", "import"]:
+		return "[color=#87CEEB]🎮 %s[/color]" % filename  
+	elif extension in ["json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf"]:
+		return "[color=#FFA500]⚙️ %s[/color]" % filename  
+	elif extension in ["txt", "md", "rst", "doc", "docx", "pdf", "rtf"]:
+		return "[color=#F5F5F5]📝 %s[/color]" % filename  
+	elif filename.ends_with("~") or filename.ends_with(".bak") or filename.ends_with(".backup"):
+		return "[color=#696969]💾 %s[/color]" % filename 
+	elif filename.begins_with("."):
+		return "[color=#696969] %s[/color]" % filename  
+	else:
+		return "[color=#FFFFFF]📄 %s[/color]" % filename  
 
 func _change_directory(args: Array) -> String:
 	if args.size() == 0:
