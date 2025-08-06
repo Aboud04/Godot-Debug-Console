@@ -11,7 +11,7 @@ A powerful, feature-rich debug console addon for Godot 4.x that provides an inte
 - **File Operations** - Create, edit, and manage files directly from console
 
 ### **User Experience**
-- **Keyboard Shortcuts** - `Ctrl + ` ` to toggle console
+- **Keyboard Shortcuts** - ``Ctrl + ` ``  to toggle console
 - **Bottom Panel** - Native Godot panel integration
 - **Command History** - Up/down arrow navigation
 - **Tab Completion** - Context-aware autocomplete cycling
@@ -143,3 +143,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ### v1.0.0
 
 - Initial release
+
