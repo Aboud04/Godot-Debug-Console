@@ -195,7 +195,7 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	if command == "mkdir":
 		return "directories"
 	
-	if command in ["ls", "rm", "mv", "cp", "touch", "open", "cat", "stat", "find", "head", "tail"]:
+	if command in ["ls", "rm", "mv", "cp", "touch", "open", "cat", "stat", "find", "head", "tail", "run_project"]:
 		return "files"
 	
 	return "commands"

@@ -32,12 +32,11 @@ func register_editor_commands():
 	CommandRegistry.register_command("open", _open_file, "Open file in editor", "editor")
 	CommandRegistry.register_command("node_types", _list_node_types, "List available node types for extends", "editor")
 	
-	#CommandRegistry.register_command("save_scene", _save_scene, "Save the current scene or a specified one", "editor")
-	#CommandRegistry.register_command("run_project", _run_project, "Run the main scene or a specific scene of your choice", "editor")
-	#CommandRegistry.register_command("stop_project", _stop_project, "Stop the currently running scene or project", "editor")
-	#CommandRegistry.register_command("build", _build, "Export the project to a chosen platform (e.g. HTML5, Windows, Linux)", "editor")
-#
-	#
+	CommandRegistry.register_command("save_scenes", _save_scene, "Save all open scenes", "editor")
+	CommandRegistry.register_command("run_project", _run_project, "Run the main scene or a specific scene of your choice", "editor")
+	CommandRegistry.register_command("stop_project", _stop_project, "Stop the currently running scene or project", "editor")
+
+	
 	
 	CommandRegistry.register_command("test", _run_tests, "Run all tests", "editor")
 	CommandRegistry.register_command("test_commands", _test_commands, "Test command functionality", "editor")
@@ -898,6 +897,43 @@ func _tail(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 	var start_index = max(0, lines.size() - lines_to_show)
 	var result_lines = lines.slice(start_index)
 	return "\n".join(result_lines)
+
+#endregion
+
+#region Editor project commands
+func _save_scene(args: Array) -> String:
+	if not Engine.is_editor_hint():
+		return "Not in editor"
+	
+	EditorInterface.save_all_scenes()
+	return "All scenes saved successfully"
+
+
+func _run_project(args: Array) -> String:
+	if not Engine.is_editor_hint():
+		return "Not in editor"
+	
+	var scene_path = ""
+	if args.size() > 0:
+		scene_path = args[0]
+		if not scene_path.ends_with(".tscn"):
+			scene_path += ".tscn"
+		if not scene_path.begins_with("res://"):
+			scene_path = "res://" + scene_path
+	
+	if scene_path.is_empty():
+		EditorInterface.play_main_scene()
+		return "Running main scene"
+	else:
+		EditorInterface.play_custom_scene(scene_path)
+		return "Running scene: %s" % scene_path
+
+func _stop_project(args: Array) -> String:
+	if not Engine.is_editor_hint():
+		return "Not in editor"
+	
+	EditorInterface.stop_playing_scene()
+	return "Project stopped"
 
 #endregion
 
