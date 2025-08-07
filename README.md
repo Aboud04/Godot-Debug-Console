@@ -1,7 +1,7 @@
 # Debug Console for Godot
 
 <p align="center">
-  <img src="console_ico.svg" width="128" alt="Debug Console icon">
+  <img src="console_icon.svg" width="128" alt="Debug Console icon">
 </p>
 
 A powerful, feature-rich debug console addon for Godot 4.x that provides an integrated terminal-like experience within the Godot editor and runtime.
@@ -270,6 +270,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with love for the Godot community**
+
 
 
 
