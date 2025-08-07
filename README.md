@@ -1,7 +1,7 @@
 # Debug Console for Godot
 
 <p align="center">
-  <img src="icon.svg" width="128" alt="Debug Console icon">
+  <img src="console_icon.svg" width="128" alt="Debug Console icon">
 </p>
 
 A powerful, feature-rich debug console addon for Godot 4.x that provides an integrated terminal-like experience within the Godot editor and runtime.
@@ -27,7 +27,7 @@ The Debug Console transforms your Godot development workflow by providing a comp
 
 ### **Development Tools**
 - **Text Processing** - `grep`, `head`, `tail`, `find` for file content analysis
-- **Project Control** - Save scenes, run/stop project, build exports
+- **Project Control** - Save scenes, run/stop project
 - **Debugging** - FPS monitoring, node counting, pause control
 - **Testing Framework** - Comprehensive test suite with 100+ test cases
 
@@ -104,7 +104,6 @@ stat <filename>       # Show file information
 save_scenes           # Save all open scenes
 run_project [scene]   # Run main scene or specified scene
 stop_project          # Stop currently running project
-build [platform]      # Export project (with instructions)
 ```
 
 ### Console Management
@@ -271,5 +270,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with love for the Godot community**
+
+
 
 
