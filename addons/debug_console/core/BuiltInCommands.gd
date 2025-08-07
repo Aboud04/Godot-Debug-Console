@@ -7,7 +7,7 @@ func register_editor_commands():
 	CommandRegistry.register_command("scene", _get_current_scene, "Get current scene info", "editor")
 	CommandRegistry.register_command("reload", _reload_scene, "Reload current scene", "editor")
 	
-	CommandRegistry.register_command("ls", _list_files, "List files in current directory", "editor")
+	CommandRegistry.register_command("ls", _list_files, "List files in current directory", "editor", true)
 	CommandRegistry.register_command("cd", _change_directory, "Change directory", "editor")
 	CommandRegistry.register_command("pwd", _print_working_directory, "Print current working directory", "editor")
 	CommandRegistry.register_command("mkdir", _make_directory, "Create directory", "editor")
@@ -15,8 +15,15 @@ func register_editor_commands():
 	CommandRegistry.register_command("rm", _remove_file, "Remove file or directory", "editor")
 	CommandRegistry.register_command("mv", _move_file, "Move/rename file", "editor")
 	CommandRegistry.register_command("cp", _copy_file, "Copy file", "editor")
-	CommandRegistry.register_command("cat", _view_file, "View file contents", "editor")
+	CommandRegistry.register_command("cat", _view_file, "View file contents", "editor", true)
 	CommandRegistry.register_command("refresh", _refresh_filesystem, "Refresh Godot filesystem", "editor")
+	
+	CommandRegistry.register_command("find", _find, "Find files by name in current or subdirectories", "editor")
+	CommandRegistry.register_command("grep", _grep, "Search for text inside files", "editor", true)
+	CommandRegistry.register_command("stat", _stat, "Display file information such as size, type, and modification time", "editor")
+	CommandRegistry.register_command("head", _head, "Show first N lines of input or file", "editor", true)
+	CommandRegistry.register_command("tail", _tail, "Show last N lines of input or file", "editor", true)
+
 	
 	CommandRegistry.register_command("new_script", _create_script, "Create new script file", "editor")
 	CommandRegistry.register_command("new_scene", _create_scene, "Create new scene file", "editor")
@@ -24,10 +31,18 @@ func register_editor_commands():
 	CommandRegistry.register_command("open", _open_file, "Open file in editor", "editor")
 	CommandRegistry.register_command("node_types", _list_node_types, "List available node types for extends", "editor")
 	
+	#CommandRegistry.register_command("save_scene", _save_scene, "Save the current scene or a specified one", "editor")
+	#CommandRegistry.register_command("run_project", _run_project, "Run the main scene or a specific scene of your choice", "editor")
+	#CommandRegistry.register_command("stop_project", _stop_project, "Stop the currently running scene or project", "editor")
+	#CommandRegistry.register_command("build", _build, "Export the project to a chosen platform (e.g. HTML5, Windows, Linux)", "editor")
+#
+	#
+	
 	CommandRegistry.register_command("test", _run_tests, "Run all tests", "editor")
 	CommandRegistry.register_command("test_commands", _test_commands, "Test command functionality", "editor")
 	CommandRegistry.register_command("test_autocomplete", _test_autocomplete, "Test autocomplete functionality", "editor")
 	CommandRegistry.register_command("test_files", _test_file_operations, "Test file operations", "editor")
+	CommandRegistry.register_command("test_pipes", _test_pipes, "Test command piping functionality", "editor")
 	CommandRegistry.register_command("quick_test", _quick_test, "Run quick test", "editor")
 
 func register_game_commands():
@@ -41,7 +56,7 @@ func register_game_commands():
 func register_universal_commands():
 	CommandRegistry.register_command("help", _help, "Show available commands", "both")
 	CommandRegistry.register_command("clear", _clear, "Clear console output", "both")
-	CommandRegistry.register_command("echo", _echo, "Echo text back", "both")
+	CommandRegistry.register_command("echo", _echo, "Echo text back", "both", true)
 	CommandRegistry.register_command("history", _history, "Show command history", "both")
 
 #region Universal commands
@@ -60,7 +75,9 @@ func _clear(args: Array) -> String:
 	
 	return ""
 
-func _echo(args: Array) -> String:
+func _echo(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	if not input.is_empty():
+		return input
 	return " ".join(args) if args.size() > 0 else "Usage: echo <message>"
 
 func _history(args: Array) -> String:
@@ -111,7 +128,7 @@ static func get_current_directory() -> String:
 static func set_current_directory(path: String):
 	global_current_directory = path
 
-func _list_files(args: Array) -> String:
+func _list_files(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
 	var dir = DirAccess.open(current_directory)
 	if not dir:
 		return "Error: Cannot access directory"
@@ -122,13 +139,22 @@ func _list_files(args: Array) -> String:
 	
 	while file_name != "":
 		if not file_name.begins_with("."):
-			var colored_name = _get_colored_filename(file_name, dir.current_is_dir())
-			files.append(colored_name)
+			files.append(file_name)
 		file_name = dir.get_next()
 	
 	dir.list_dir_end()
 	files.sort()
-	return "Files in %s:\n%s" % [current_directory, "\t".join(files)]
+	
+	# Always return colored output for better visual experience
+	var colored_files = []
+	for fn in files:
+		var colored_name = _get_colored_filename(fn, dir.current_is_dir())
+		colored_files.append(colored_name)
+	
+	if is_pipe_context:
+		return "\n".join(colored_files)
+	
+	return "Files in %s:\n%s" % [current_directory, "\t".join(colored_files)]
 
 func _get_colored_filename(filename: String, is_dir: bool) -> String:
 	if is_dir:
@@ -280,7 +306,7 @@ func _copy_file(args: Array) -> String:
 	_refresh_filesystem([])
 	return "Copied %s to %s" % [source, dest]
 
-func _view_file(args: Array) -> String:
+func _view_file(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
 	if args.size() == 0:
 		return "Usage: cat <filename>"
 	
@@ -296,6 +322,10 @@ func _view_file(args: Array) -> String:
 	
 	var content = file.get_as_text()
 	file.close()
+	
+	# If we have input from a pipe, return plain text for better processing
+	if is_pipe_context or not input.is_empty():
+		return content
 	
 	var extension = file_name.get_extension().to_lower()
 	if extension == "gd":
@@ -657,6 +687,229 @@ func _list_node_types(args: Array) -> String:
 	return "Available node types:\n" + "\n".join(valid_types)
 #endregion
 
+#region Search and filter commands
+func _find(args: Array) -> String:
+	var dir = DirAccess.open(current_directory)
+	if not dir:
+		return "Error: Cannot access directory"
+	
+	var search_name = args[0] if args.size() > 0 else ""
+	if search_name.is_empty():
+		return "Usage: find <filename_pattern>"
+	
+	var results = []
+	_find_recursive(dir, search_name, results)
+	
+	if results.is_empty():
+		return "No files found matching: %s" % search_name
+	else:
+		return "Found %d files:\n%s" % [results.size(), "\n".join(results)]
+
+func _find_recursive(dir: DirAccess, pattern: String, results: Array):
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	
+	while file_name != "":
+		if not file_name.begins_with("."):
+			var full_path = dir.get_current_dir().path_join(file_name)
+			if dir.current_is_dir():
+				var subdir = DirAccess.open(full_path)
+				if subdir:
+					_find_recursive(subdir, pattern, results)
+			elif file_name.contains(pattern):
+				results.append(full_path)
+		file_name = dir.get_next()
+	
+	dir.list_dir_end()
+
+func _grep(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	var search_pattern = ""
+	var search_path = current_directory
+	
+	if args.size() > 0:
+		search_pattern = args[0]
+	else:
+		return "Usage: grep <pattern> [path] or use with pipe"
+	
+	# If we have input from a pipe, search in that text
+	if not input.is_empty():
+		var lines = input.split("\n")
+		var results = []
+		for i in range(lines.size()):
+			if lines[i].contains(search_pattern):
+				results.append(lines[i])  # Don't add line numbers for colored output
+		return "\n".join(results) if not results.is_empty() else "No matches found"
+	
+	# Otherwise search in files
+	if args.size() > 1:
+		search_path = current_directory.path_join(args[1])
+	
+	var results = []
+	_grep_recursive(search_path, search_pattern, results)
+	
+	if results.is_empty():
+		return "No matches found for: %s" % search_pattern
+	else:
+		return "Found %d matches:\n%s" % [results.size(), "\n".join(results)]
+
+func _grep_recursive(path: String, pattern: String, results: Array):
+	if FileAccess.file_exists(path):
+		var file = FileAccess.open(path, FileAccess.READ)
+		if file:
+			var content = file.get_as_text()
+			file.close()
+			var lines = content.split("\n")
+			for i in range(lines.size()):
+				if lines[i].contains(pattern):
+					results.append("%s:%d: %s" % [path, i + 1, lines[i]])
+	elif DirAccess.dir_exists_absolute(path):
+		var dir = DirAccess.open(path)
+		if dir:
+			dir.list_dir_begin()
+			var file_name = dir.get_next()
+			while file_name != "":
+				if not file_name.begins_with("."):
+					var full_path = path.path_join(file_name)
+					_grep_recursive(full_path, pattern, results)
+				file_name = dir.get_next()
+			dir.list_dir_end()
+
+func _stat(args: Array) -> String:
+	if args.size() == 0:
+		return "Usage: stat <filename>"
+	
+	var file_name = args[0]
+	var full_path = current_directory.path_join(file_name)
+	
+	if not FileAccess.file_exists(full_path) and not DirAccess.dir_exists_absolute(full_path):
+		return "Error: File or directory not found - %s" % full_path
+	
+	var info = []
+	info.append("File: %s" % full_path)
+	
+	if FileAccess.file_exists(full_path):
+		var file = FileAccess.open(full_path, FileAccess.READ)
+		if file:
+			var size = file.get_length()
+			file.close()
+			info.append("Type: File")
+			info.append("Size: %d bytes" % size)
+			info.append("Extension: %s" % file_name.get_extension())
+	elif DirAccess.dir_exists_absolute(full_path):
+		info.append("Type: Directory")
+		var dir = DirAccess.open(full_path)
+		if dir:
+			var count = 0
+			dir.list_dir_begin()
+			var file_name_in_dir = dir.get_next()
+			while file_name_in_dir != "":
+				if not file_name_in_dir.begins_with("."):
+					count += 1
+				file_name_in_dir = dir.get_next()
+			dir.list_dir_end()
+			info.append("Items: %d" % count)
+	
+	return "\n".join(info)
+
+func _head(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	var lines_to_show = 10
+	var content = ""
+	
+	# Determine content source and lines to show
+	if not input.is_empty():
+		# We have input from a pipe
+		content = input
+		if args.size() > 0:
+			lines_to_show = args[0].to_int()
+	elif args.size() > 0:
+		# Check if first argument is a number
+		if args[0].is_valid_int():
+			lines_to_show = args[0].to_int()
+			if args.size() > 1:
+				# Second argument is filename
+				var file_name = args[1]
+				var full_path = current_directory.path_join(file_name)
+				if FileAccess.file_exists(full_path):
+					var file = FileAccess.open(full_path, FileAccess.READ)
+					if file:
+						content = file.get_as_text()
+						file.close()
+				else:
+					return "Error: File not found - %s" % full_path
+			else:
+				return "Usage: head [lines] [filename] or use with pipe"
+		else:
+			# First argument is filename
+			var file_name = args[0]
+			var full_path = current_directory.path_join(file_name)
+			if FileAccess.file_exists(full_path):
+				var file = FileAccess.open(full_path, FileAccess.READ)
+				if file:
+					content = file.get_as_text()
+					file.close()
+			else:
+				return "Error: File not found - %s" % full_path
+	else:
+		return "Usage: head [lines] [filename] or use with pipe"
+	
+	if content.is_empty():
+		return "No content to process"
+	
+	var lines = content.split("\n")
+	var result_lines = lines.slice(0, min(lines_to_show, lines.size()))
+	return "\n".join(result_lines)
+
+func _tail(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	var lines_to_show = 10
+	var content = ""
+	
+	# Determine content source and lines to show
+	if not input.is_empty():
+		# We have input from a pipe
+		content = input
+		if args.size() > 0:
+			lines_to_show = args[0].to_int()
+	elif args.size() > 0:
+		# Check if first argument is a number
+		if args[0].is_valid_int():
+			lines_to_show = args[0].to_int()
+			if args.size() > 1:
+				# Second argument is filename
+				var file_name = args[1]
+				var full_path = current_directory.path_join(file_name)
+				if FileAccess.file_exists(full_path):
+					var file = FileAccess.open(full_path, FileAccess.READ)
+					if file:
+						content = file.get_as_text()
+						file.close()
+				else:
+					return "Error: File not found - %s" % full_path
+			else:
+				return "Usage: tail [lines] [filename] or use with pipe"
+		else:
+			# First argument is filename
+			var file_name = args[0]
+			var full_path = current_directory.path_join(file_name)
+			if FileAccess.file_exists(full_path):
+				var file = FileAccess.open(full_path, FileAccess.READ)
+				if file:
+					content = file.get_as_text()
+					file.close()
+			else:
+				return "Error: File not found - %s" % full_path
+	else:
+		return "Usage: tail [lines] [filename] or use with pipe"
+	
+	if content.is_empty():
+		return "No content to process"
+	
+	var lines = content.split("\n")
+	var start_index = max(0, lines.size() - lines_to_show)
+	var result_lines = lines.slice(start_index)
+	return "\n".join(result_lines)
+
+#endregion
+
 #region Testing commands
 func _run_tests(args: Array) -> String:
 	var test_framework = TestFramework.new()
@@ -664,7 +917,7 @@ func _run_tests(args: Array) -> String:
 	
 	register_editor_commands()
 	
-	return "Tests completed. Console reset. Check console for results."
+	return "All tests completed (including piping tests). Console reset. Check console for results."
 
 func _test_commands(args: Array) -> String:
 	var test_framework = TestFramework.new()
@@ -689,6 +942,15 @@ func _test_file_operations(args: Array) -> String:
 	register_editor_commands()
 	
 	return "File operation tests completed. Console reset. Check console for results."
+
+func _test_pipes(args: Array) -> String:
+	var test_framework = TestFramework.new()
+	test_framework.run_piping_tests()
+	
+	# Re-register commands after test
+	register_editor_commands()
+	
+	return "Piping tests completed. Check console for results."
 
 func _quick_test(args: Array) -> String:
 	var test_framework = TestFramework.new()

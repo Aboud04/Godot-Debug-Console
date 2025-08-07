@@ -19,6 +19,7 @@ func run_all_tests():
 	run_command_tests()
 	run_autocomplete_tests()
 	run_file_operation_tests()
+	run_piping_tests()
 	run_integration_tests()
 	
 	print_results()
@@ -198,6 +199,78 @@ func run_file_operation_tests():
 		var commands = BuiltInCommands.new()
 		var result = commands._print_working_directory([])
 		return result.contains("Current directory")
+	)
+
+func run_piping_tests():
+	print("\nTesting Command Piping...")
+	
+	test("Piping - Simple Echo Pipe", func():
+		var result = CommandRegistry.execute_command("echo hello world | echo")
+		return result == "hello world"
+	)
+	
+	test("Piping - LS to Grep", func():
+		var result = CommandRegistry.execute_command("ls | grep .gd")
+		return result.contains(".gd") or result == "No matches found"
+	)
+	
+	test("Piping - Multiple Pipes", func():
+		var result = CommandRegistry.execute_command("ls | grep .gd | head 5")
+		return not result.contains("Error") and not result.contains("Usage")
+	)
+	
+	test("Piping - Cat to Grep", func():
+		# Create a test file first
+		var test_content = "func test_function():\n    print('hello')\nfunc another_function():\n    pass"
+		create_test_file("test_pipe_file.gd", test_content)
+		
+		var result = CommandRegistry.execute_command("cat test_pipe_file.gd | grep func")
+		
+		# Cleanup
+		cleanup_test_file("test_pipe_file.gd")
+		
+		return result.contains("func") and result.contains("test_function")
+	)
+	
+	test("Piping - Head and Tail", func():
+		var result = CommandRegistry.execute_command("ls | head 3 | tail 2")
+		return not result.contains("Error") and not result.contains("Usage")
+	)
+	
+	test("Piping - Find to Grep", func():
+		var result = CommandRegistry.execute_command("find .gd | grep test")
+		return not result.contains("Error") and not result.contains("Usage")
+	)
+	
+	test("Piping - Command with No Input Support", func():
+		# Test that when we pipe to a command that doesn't support input,
+		# the input gets prepended to the arguments
+		var result = CommandRegistry.execute_command("echo nonexistent_command | help")
+		# This should become "help nonexistent_command" which returns "Unknown command: nonexistent_command"
+		return result.contains("Unknown command: nonexistent_command")
+	)
+	
+	test("Piping - Command with Input Support", func():
+		# Test that when we pipe to a command that supports input,
+		# the input is passed as the second parameter
+		var result = CommandRegistry.execute_command("echo hello world | grep hello")
+		# This should search for "hello" in the input "hello world"
+		return result.contains("hello world")
+	)
+	
+	test("Piping - Empty Pipe Chain", func():
+		var result = CommandRegistry.execute_command("echo hello | | echo world")
+		return result == "hello"
+	)
+	
+	test("Piping - Whitespace Handling", func():
+		var result = CommandRegistry.execute_command(" echo hello | echo ")
+		return result == "hello"
+	)
+	
+	test("Piping - Unknown Command in Chain", func():
+		var result = CommandRegistry.execute_command("echo hello | unknown_command")
+		return result.contains("Unknown command")
 	)
 
 func run_integration_tests():
