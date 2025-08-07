@@ -14,6 +14,7 @@ func register_editor_commands():
 	CommandRegistry.register_command("mkdir", _make_directory, "Create directory", "editor")
 	CommandRegistry.register_command("touch", _create_file, "Create file", "editor")
 	CommandRegistry.register_command("rm", _remove_file, "Remove file or directory", "editor")
+	CommandRegistry.register_command("rmdir", _remove_directory, "Remove directory", "editor")
 	CommandRegistry.register_command("mv", _move_file, "Move/rename file", "editor")
 	CommandRegistry.register_command("cp", _copy_file, "Copy file", "editor")
 	CommandRegistry.register_command("cat", _view_file, "View file contents", "editor", true)
@@ -38,7 +39,7 @@ func register_editor_commands():
 
 	
 	
-	CommandRegistry.register_command("test", _run_tests, "Run all tests", "editor")
+	
 	CommandRegistry.register_command("test_commands", _test_commands, "Test command functionality", "editor")
 	CommandRegistry.register_command("test_autocomplete", _test_autocomplete, "Test autocomplete functionality", "editor")
 	CommandRegistry.register_command("test_files", _test_file_operations, "Test file operations", "editor")
@@ -54,10 +55,12 @@ func register_game_commands():
 	CommandRegistry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
 
 func register_universal_commands():
+	CommandRegistry.register_command("test", _run_tests, "Run all tests", "both")
 	CommandRegistry.register_command("help", _help, "Show available commands", "both")
 	CommandRegistry.register_command("clear", _clear, "Clear console output", "both")
+	CommandRegistry.register_command("history", _show_history, "Show command history", "both")
+	CommandRegistry.register_command("clear_history", _clear_history, "Clear command history", "both")
 	CommandRegistry.register_command("echo", _echo, "Echo text back", "both", true)
-	CommandRegistry.register_command("history", _history, "Show command history", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -261,6 +264,22 @@ func _remove_file(args: Array) -> String:
 		return "Removed: %s" % file_name
 	else:
 		return "Error: Failed to remove file"
+
+func _remove_directory(args: Array) -> String:
+	if args.size() == 0:
+		return "Usage: rmdir <directory>"
+	
+	var dir_name = args[0]
+	var dir = DirAccess.open(current_directory)
+	if not dir:
+		return "Error: Cannot access directory"
+	
+	var result = dir.remove(dir_name)
+	if result == OK:
+		_refresh_filesystem([])
+		return "Removed directory: %s" % dir_name
+	else:
+		return "Error: Failed to remove directory"
 
 func _move_file(args: Array) -> String:
 	if args.size() < 2:
@@ -937,6 +956,23 @@ func _stop_project(args: Array) -> String:
 
 #endregion
 
+#region History commands
+func _show_history(args: Array) -> String:
+	var history = CommandRegistry.get_command_history()
+	if history.is_empty():
+		return "Command history is empty"
+	
+	var result = "Command history:\n"
+	for i in range(history.size()):
+		result += "%d: %s\n" % [i + 1, history[i]]
+	
+	return result
+
+func _clear_history(args: Array) -> String:
+	CommandRegistry.clear_command_history()
+	return "History cleared"
+#endregion
+
 #region Testing commands
 func _run_tests(args: Array) -> String:
 	var test_framework = TestFramework.new()
@@ -944,15 +980,15 @@ func _run_tests(args: Array) -> String:
 	
 	register_editor_commands()
 	
-	return "All tests completed (including piping tests). Console reset. Check console for results."
+	return "Comprehensive test suite completed! Check console for detailed results."
 
 func _test_commands(args: Array) -> String:
 	var test_framework = TestFramework.new()
-	test_framework.run_command_tests()
+	test_framework.run_command_registry_tests()
 	
 	register_editor_commands()
 	
-	return "Command tests completed. Console reset. Check console for results."
+	return "Command registry tests completed! Check console for results."
 
 func _test_autocomplete(args: Array) -> String:
 	var test_framework = TestFramework.new()
@@ -968,7 +1004,7 @@ func _test_file_operations(args: Array) -> String:
 	
 	register_editor_commands()
 	
-	return "File operation tests completed. Console reset. Check console for results."
+	return "File operation tests completed! Check console for results."
 
 func _test_pipes(args: Array) -> String:
 	var test_framework = TestFramework.new()
@@ -981,8 +1017,9 @@ func _test_pipes(args: Array) -> String:
 
 func _quick_test(args: Array) -> String:
 	var test_framework = TestFramework.new()
-	test_framework.run_command_tests()
-	return "Quick test completed"
+	test_framework.run_command_registry_tests()
+	test_framework.run_builtin_commands_tests()
+	return "Quick test completed - Command registry and built-in commands tested"
 #endregion
 
 #region Game commands

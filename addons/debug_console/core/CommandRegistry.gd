@@ -145,3 +145,13 @@ func get_command_help(cmd_name: String = "") -> String:
 		help_lines.append("  %s - %s" % [cmd, desc])
 	
 	return "\n".join(help_lines)
+
+func get_command_history() -> Array[String]:
+	# This would need to be implemented to track command history
+	# For now, return an empty array
+	return []
+
+func clear_command_history():
+	# This would need to be implemented to clear command history
+	# For now, do nothing
+	pass
