@@ -1,4 +1,5 @@
 @tool
+@icon("res://addons/debug_console/icons/console_icon.svg")
 extends EditorPlugin
 
 var editor_console_panel: Control
@@ -15,6 +16,7 @@ func _enter_tree():
 	builtin_commands.register_editor_commands()
 	
 	_add_toggle_shortcut()
+	
 	console_button = add_control_to_bottom_panel(editor_console_panel, "Debug Console")
 	
 	show_console()
