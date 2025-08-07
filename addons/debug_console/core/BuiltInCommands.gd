@@ -1,6 +1,7 @@
 @tool
 class_name BuiltInCommands extends RefCounted
 
+#region BuiltInCommands
 func register_editor_commands():
 	register_universal_commands()
 	
@@ -145,7 +146,6 @@ func _list_files(args: Array, input: String = "", is_pipe_context: bool = false)
 	dir.list_dir_end()
 	files.sort()
 	
-	# Always return colored output for better visual experience
 	var colored_files = []
 	for fn in files:
 		var colored_name = _get_colored_filename(fn, dir.current_is_dir())
@@ -323,7 +323,7 @@ func _view_file(args: Array, input: String = "", is_pipe_context: bool = false) 
 	var content = file.get_as_text()
 	file.close()
 	
-	# If we have input from a pipe, return plain text for better processing
+
 	if is_pipe_context or not input.is_empty():
 		return content
 	
@@ -731,16 +731,15 @@ func _grep(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 	else:
 		return "Usage: grep <pattern> [path] or use with pipe"
 	
-	# If we have input from a pipe, search in that text
 	if not input.is_empty():
 		var lines = input.split("\n")
 		var results = []
 		for i in range(lines.size()):
 			if lines[i].contains(search_pattern):
-				results.append(lines[i])  # Don't add line numbers for colored output
+				results.append(lines[i])  
 		return "\n".join(results) if not results.is_empty() else "No matches found"
 	
-	# Otherwise search in files
+
 	if args.size() > 1:
 		search_path = current_directory.path_join(args[1])
 	
@@ -815,18 +814,15 @@ func _head(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 	var lines_to_show = 10
 	var content = ""
 	
-	# Determine content source and lines to show
+
 	if not input.is_empty():
-		# We have input from a pipe
 		content = input
 		if args.size() > 0:
 			lines_to_show = args[0].to_int()
 	elif args.size() > 0:
-		# Check if first argument is a number
 		if args[0].is_valid_int():
 			lines_to_show = args[0].to_int()
 			if args.size() > 1:
-				# Second argument is filename
 				var file_name = args[1]
 				var full_path = current_directory.path_join(file_name)
 				if FileAccess.file_exists(full_path):
@@ -839,7 +835,6 @@ func _head(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 			else:
 				return "Usage: head [lines] [filename] or use with pipe"
 		else:
-			# First argument is filename
 			var file_name = args[0]
 			var full_path = current_directory.path_join(file_name)
 			if FileAccess.file_exists(full_path):
@@ -863,18 +858,14 @@ func _tail(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 	var lines_to_show = 10
 	var content = ""
 	
-	# Determine content source and lines to show
 	if not input.is_empty():
-		# We have input from a pipe
 		content = input
 		if args.size() > 0:
 			lines_to_show = args[0].to_int()
 	elif args.size() > 0:
-		# Check if first argument is a number
 		if args[0].is_valid_int():
 			lines_to_show = args[0].to_int()
 			if args.size() > 1:
-				# Second argument is filename
 				var file_name = args[1]
 				var full_path = current_directory.path_join(file_name)
 				if FileAccess.file_exists(full_path):
@@ -988,5 +979,8 @@ func _set_time_scale(args: Array) -> String:
 	
 	Engine.time_scale = scale
 	return "Time scale set to: %.2f" % scale
+
+#endregion
+
 
 #endregion

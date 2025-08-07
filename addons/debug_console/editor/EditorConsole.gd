@@ -195,7 +195,7 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	if command == "mkdir":
 		return "directories"
 	
-	if command in ["ls", "rm", "mv", "cp", "touch", "open", "cat"]:
+	if command in ["ls", "rm", "mv", "cp", "touch", "open", "cat", "stat", "find", "head", "tail"]:
 		return "files"
 	
 	return "commands"
@@ -211,7 +211,11 @@ func _get_command_suggestions(current_word: String):
 	_last_autocomplete_word = current_word
 
 func _get_file_suggestions(current_word: String):
-	var current_dir = BuiltInCommands.get_current_directory()
+	var current_dir = "res://"
+	if BuiltInCommands and BuiltInCommands.get_current_directory:
+		current_dir = BuiltInCommands.get_current_directory()
+		if current_dir != "res://":
+			current_dir = "res://"
 	
 	if current_word.contains("/"):
 		var path_parts = current_word.split("/")
@@ -263,7 +267,11 @@ func _get_file_suggestions(current_word: String):
 	_last_autocomplete_word = current_word
 
 func _get_directory_suggestions(current_word: String):
-	var current_dir = BuiltInCommands.get_current_directory()
+	var current_dir = "res://"
+	if BuiltInCommands and BuiltInCommands.get_current_directory:
+		current_dir = BuiltInCommands.get_current_directory()
+		if current_dir != "res://":
+			current_dir = "res://"
 	
 	if current_word.contains("/"):
 		var path_parts = current_word.split("/")

@@ -23,7 +23,6 @@ func unregister_command(name: String):
 		DebugCore.Log("Command unregistered: " + name)
 
 func execute_command(input: String) -> String:
-	# Check if input contains pipes
 	if input.contains("|"):
 		return execute_command_with_pipes(input)
 	
@@ -52,7 +51,6 @@ func execute_command(input: String) -> String:
 		command_executed.emit(input, error_msg)
 		return error_msg
 	
-	# Use callable.callv() for consistent argument passing
 	var result = command_data.callable.callv([args])
 	
 	var result_str = str(result) if result != null else ""
@@ -61,12 +59,10 @@ func execute_command(input: String) -> String:
 
 
 func execute_command_with_pipes(input: String) -> String:
-	# Trim whitespace and split by pipe character
 	var trimmed_input = input.strip_edges()
 	var commands = trimmed_input.split("|")
 	
 	if commands.size() == 1:
-		# No pipes, use regular execution
 		return execute_command(trimmed_input)
 	
 	var current_input = ""
@@ -76,7 +72,7 @@ func execute_command_with_pipes(input: String) -> String:
 		if command_str.is_empty():
 			continue
 		
-		# Parse the command and its arguments
+
 		var parts = command_str.split(" ", false)
 		if parts.is_empty():
 			continue
@@ -84,7 +80,7 @@ func execute_command_with_pipes(input: String) -> String:
 		var cmd_name = parts[0].to_lower()
 		var args = parts.slice(1)
 		
-		# Check if command exists
+	
 		if not _commands.has(cmd_name):
 			var error_msg = "Unknown command: %s" % cmd_name
 			command_executed.emit(input, error_msg)
@@ -92,7 +88,7 @@ func execute_command_with_pipes(input: String) -> String:
 		
 		var command_data = _commands[cmd_name]
 		
-		# Check context
+
 		var current_context = "editor" if Engine.is_editor_hint() else "game"
 		if command_data.context != "both" and command_data.context != current_context:
 			var error_msg = "Command '%s' not available in %s context" % [cmd_name, current_context]
@@ -103,28 +99,22 @@ func execute_command_with_pipes(input: String) -> String:
 			var error_msg = "Command '%s' is no longer valid (object was destroyed)" % cmd_name
 			command_executed.emit(input, error_msg)
 			return error_msg
-		
-		# Execute the command with current input as additional parameter
+
 		var result
 		if command_data.supports_input:
-			# Command supports both args and input parameters
-			# Check if this is a pipe context (more than one command)
+		
 			var is_pipe_context = commands.size() > 1
 			result = command_data.callable.callv([args, current_input, is_pipe_context])
 		else:
-			# Command only supports args parameter, prepend input to args if not empty
 			var modified_args = args.duplicate()
 			if not current_input.is_empty():
 				modified_args.insert(0, current_input)
 			result = command_data.callable.callv([modified_args])
 		
-		# Convert result to string
 		var result_str = str(result) if result != null else ""
 		
-		# Pass this result as input to the next command
 		current_input = result_str
 	
-	# Emit the final result
 	command_executed.emit(input, current_input)
 	return current_input
 
