@@ -212,7 +212,7 @@ func _get_command_suggestions(current_word: String):
 
 func _get_file_suggestions(current_word: String):
 	var current_dir = "res://"
-	if BuiltInCommands and BuiltInCommands.get_current_directory:
+	if BuiltInCommands.get_current_directory:
 		current_dir = BuiltInCommands.get_current_directory()
 		if current_dir != "res://":
 			current_dir = "res://"
@@ -268,7 +268,7 @@ func _get_file_suggestions(current_word: String):
 
 func _get_directory_suggestions(current_word: String):
 	var current_dir = "res://"
-	if BuiltInCommands and BuiltInCommands.get_current_directory:
+	if BuiltInCommands.get_current_directory:
 		current_dir = BuiltInCommands.get_current_directory()
 		if current_dir != "res://":
 			current_dir = "res://"

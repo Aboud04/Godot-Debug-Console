@@ -72,7 +72,6 @@ func execute_command_with_pipes(input: String) -> String:
 		if command_str.is_empty():
 			continue
 		
-
 		var parts = command_str.split(" ", false)
 		if parts.is_empty():
 			continue
@@ -80,7 +79,6 @@ func execute_command_with_pipes(input: String) -> String:
 		var cmd_name = parts[0].to_lower()
 		var args = parts.slice(1)
 		
-	
 		if not _commands.has(cmd_name):
 			var error_msg = "Unknown command: %s" % cmd_name
 			command_executed.emit(input, error_msg)
@@ -88,7 +86,6 @@ func execute_command_with_pipes(input: String) -> String:
 		
 		var command_data = _commands[cmd_name]
 		
-
 		var current_context = "editor" if Engine.is_editor_hint() else "game"
 		if command_data.context != "both" and command_data.context != current_context:
 			var error_msg = "Command '%s' not available in %s context" % [cmd_name, current_context]
@@ -102,7 +99,6 @@ func execute_command_with_pipes(input: String) -> String:
 
 		var result
 		if command_data.supports_input:
-		
 			var is_pipe_context = commands.size() > 1
 			result = command_data.callable.callv([args, current_input, is_pipe_context])
 		else:
@@ -112,7 +108,6 @@ func execute_command_with_pipes(input: String) -> String:
 			result = command_data.callable.callv([modified_args])
 		
 		var result_str = str(result) if result != null else ""
-		
 		current_input = result_str
 	
 	command_executed.emit(input, current_input)
@@ -147,11 +142,7 @@ func get_command_help(cmd_name: String = "") -> String:
 	return "\n".join(help_lines)
 
 func get_command_history() -> Array[String]:
-	# This would need to be implemented to track command history
-	# For now, return an empty array
 	return []
 
 func clear_command_history():
-	# This would need to be implemented to clear command history
-	# For now, do nothing
 	pass
