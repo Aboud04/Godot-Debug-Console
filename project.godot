@@ -12,8 +12,9 @@ config_version=5
 
 config/name="Debug Console"
 run/main_scene="res://test_scene.tscn"
+config/auto_accept_quit=false
 config/features=PackedStringArray("4.4", "Forward Plus")
-config/icon="res://addons/debug_console/icons/console_icon.svg"
+config/icon="uid://bx514ndiixgu1"
 
 [autoload]
 
