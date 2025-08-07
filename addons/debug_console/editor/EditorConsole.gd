@@ -195,7 +195,7 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	if command == "mkdir":
 		return "directories"
 	
-	if command in ["ls", "rm", "mv", "cp", "touch", "open"]:
+	if command in ["ls", "rm", "mv", "cp", "touch", "open", "cat"]:
 		return "files"
 	
 	return "commands"
@@ -213,7 +213,6 @@ func _get_command_suggestions(current_word: String):
 func _get_file_suggestions(current_word: String):
 	var current_dir = BuiltInCommands.get_current_directory()
 	
-	# Handle partial paths (e.g., "addons/debug" should suggest "addons/debug_console")
 	if current_word.contains("/"):
 		var path_parts = current_word.split("/")
 		var partial_path = "/".join(path_parts.slice(0, -1))

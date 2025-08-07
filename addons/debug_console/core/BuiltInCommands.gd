@@ -15,6 +15,8 @@ func register_editor_commands():
 	CommandRegistry.register_command("rm", _remove_file, "Remove file or directory", "editor")
 	CommandRegistry.register_command("mv", _move_file, "Move/rename file", "editor")
 	CommandRegistry.register_command("cp", _copy_file, "Copy file", "editor")
+	CommandRegistry.register_command("cat", _view_file, "View file contents", "editor")
+	CommandRegistry.register_command("refresh", _refresh_filesystem, "Refresh Godot filesystem", "editor")
 	
 	CommandRegistry.register_command("new_script", _create_script, "Create new script file", "editor")
 	CommandRegistry.register_command("new_scene", _create_scene, "Create new scene file", "editor")
@@ -88,6 +90,13 @@ func _reload_scene(args: Array) -> String:
 	
 	EditorInterface.reload_scene_from_path(EditorInterface.get_edited_scene_root().scene_file_path)
 	return "Scene reloaded"
+
+func _refresh_filesystem(args: Array) -> String:
+	if not Engine.is_editor_hint():
+		return "Not in editor"
+	
+	EditorInterface.get_resource_filesystem().scan()
+	return "Filesystem refreshed"
 
 #endregion
 
@@ -193,7 +202,7 @@ func _make_directory(args: Array) -> String:
 	
 	var result = dir.make_dir_recursive(dir_name)
 	if result == OK:
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Created directory: %s" % dir_name
 	else:
 		return "Error: Failed to create directory"
@@ -207,7 +216,7 @@ func _create_file(args: Array) -> String:
 	var file = FileAccess.open(full_path, FileAccess.WRITE)
 	if file:
 		file.close()
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Created file: %s" % file_name
 	else:
 		return "Error: Failed to create file"
@@ -223,7 +232,7 @@ func _remove_file(args: Array) -> String:
 	
 	var result = dir.remove(file_name)
 	if result == OK:
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Removed: %s" % file_name
 	else:
 		return "Error: Failed to remove file"
@@ -240,7 +249,7 @@ func _move_file(args: Array) -> String:
 	
 	var result = dir.rename(source, dest)
 	if result == OK:
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Moved %s to %s" % [source, dest]
 	else:
 		return "Error: Failed to move file"
@@ -268,8 +277,238 @@ func _copy_file(args: Array) -> String:
 	source_file.close()
 	dest_file.close()
 	
-	EditorInterface.get_resource_filesystem().scan()
+	_refresh_filesystem([])
 	return "Copied %s to %s" % [source, dest]
+
+func _view_file(args: Array) -> String:
+	if args.size() == 0:
+		return "Usage: cat <filename>"
+	
+	var file_name = args[0]
+	var full_path = current_directory.path_join(file_name)
+	
+	if not FileAccess.file_exists(full_path):
+		return "Error: File not found - %s" % full_path
+	
+	var file = FileAccess.open(full_path, FileAccess.READ)
+	if not file:
+		return "Error: Cannot read file - %s" % file_name
+	
+	var content = file.get_as_text()
+	file.close()
+	
+	var extension = file_name.get_extension().to_lower()
+	if extension == "gd":
+		content = _colorize_gdscript(content)
+	
+	# Limit output to prevent console overflow
+	var limit: int = 3000
+	if content.length() > limit:  
+		var preview = content.substr(0, limit)
+		return "%s:\n%s\n... (truncated)" % [file_name, preview]
+	else:
+		return "%s:\n%s" % [file_name, content]
+
+func _colorize_gdscript(content: String) -> String:
+	var lines = content.split("\n")
+	var colored_lines = []
+	
+	for line in lines:
+		var colored_line = line
+		
+
+		if line.strip_edges().begins_with("#"):
+			colored_line = "[color=#999999]%s[/color]" % line
+		else:
+
+			colored_line = _color_strings(colored_line)
+			
+
+			colored_line = _color_comments(colored_line)
+			
+			
+			if not _is_line_comment(line):
+				colored_line = _color_keywords(colored_line)
+				colored_line = _color_types(colored_line)
+				colored_line = _color_functions(colored_line)
+				colored_line = _color_numbers(colored_line)
+				colored_line = _color_function_definitions(colored_line)
+		
+		colored_lines.append(colored_line)
+	
+	return "\n".join(colored_lines)
+
+func _is_line_comment(line: String) -> bool:
+	return line.strip_edges().begins_with("#")
+
+func _color_strings(text: String) -> String:
+	var result = text
+	
+
+	var i = 0
+	while i < result.length():
+		if result[i] == '"':
+			var start = i
+			i += 1
+			var escaped = false
+			while i < result.length():
+				if escaped:
+					escaped = false
+				elif result[i] == '\\':
+					escaped = true
+				elif result[i] == '"':
+					break
+				i += 1
+			if i < result.length():
+				var string_content = result.substr(start, i - start + 1)
+				var colored_string = "[color=#98D8C8]%s[/color]" % string_content
+				result = result.substr(0, start) + colored_string + result.substr(i + 1)
+				i = start + colored_string.length()
+		else:
+			i += 1
+	
+
+	i = 0
+	while i < result.length():
+		if result[i] == "'" and not _is_inside_color_tag(result, i):
+			var start = i
+			i += 1
+			var escaped = false
+			while i < result.length():
+				if escaped:
+					escaped = false
+				elif result[i] == '\\':
+					escaped = true
+				elif result[i] == "'":
+					break
+				i += 1
+			if i < result.length():
+				var string_content = result.substr(start, i - start + 1)
+				var colored_string = "[color=#98D8C8]%s[/color]" % string_content
+				result = result.substr(0, start) + colored_string + result.substr(i + 1)
+				i = start + colored_string.length()
+		else:
+			i += 1
+	
+	return result
+
+func _color_comments(text: String) -> String:
+	var hash_pos = text.find("#")
+	if hash_pos != -1 and not _is_inside_color_tag(text, hash_pos):
+		var before_comment = text.substr(0, hash_pos)
+		var comment = text.substr(hash_pos)
+		return before_comment + "[color=#999999]%s[/color]" % comment
+	return text
+
+func _color_keywords(text: String) -> String:
+	var keywords = ["extends", "class_name", "func", "var", "const", "signal", "enum", 
+					"if", "elif", "else", "for", "while", "match", "continue", "break", 
+					"return", "pass", "and", "or", "not", "in", "is", "as", "self", 
+					"true", "false", "null", "PI", "TAU", "INF", "NAN"]
+	
+	var result = text
+	for keyword in keywords:
+		result = _replace_whole_word(result, keyword, "[color=#FF6B9D]%s[/color]" % keyword)
+	return result
+
+func _color_types(text: String) -> String:
+	var types = ["bool", "int", "float", "String", "Vector2", "Vector3", "Color", 
+				 "Array", "Dictionary", "Node2D", "Node3D", "Node", "Control", "Resource"]
+	
+	var result = text
+	for type in types:
+		result = _replace_whole_word(result, type, "[color=#4ECDC4]%s[/color]" % type)
+	return result
+
+func _color_functions(text: String) -> String:
+	var builtins = ["print", "printerr", "printt", "prints", "push_error", "push_warning",
+					"len", "range", "abs", "min", "max", "clamp", "lerp", "sin", "cos", "tan"]
+	
+	var result = text
+	for builtin in builtins:
+		var pattern = builtin + "("
+		var pos = result.find(pattern)
+		while pos != -1:
+			if _is_word_boundary_before(result, pos) and not _is_inside_color_tag(result, pos):
+				var colored_func = "[color=#45B7D1]%s[/color](" % builtin
+				result = result.substr(0, pos) + colored_func + result.substr(pos + pattern.length())
+				pos = result.find(pattern, pos + colored_func.length())
+			else:
+				pos = result.find(pattern, pos + 1)
+	return result
+
+func _color_numbers(text: String) -> String:
+	var result = text
+	var i = 0
+	while i < result.length():
+		if result[i].is_valid_int() and not _is_inside_color_tag(result, i):
+			if i == 0 or not result[i-1].is_valid_identifier():
+				var start = i
+				while i < result.length() and (result[i].is_valid_int() or result[i] == '.'):
+					i += 1
+				if i >= result.length() or not result[i].is_valid_identifier():
+					var number = result.substr(start, i - start)
+					var colored_number = "[color=#F7DC6F]%s[/color]" % number
+					result = result.substr(0, start) + colored_number + result.substr(i)
+					i = start + colored_number.length()
+					continue
+		i += 1
+	return result
+
+func _color_function_definitions(text: String) -> String:
+	var func_pos = text.find("func ")
+	if func_pos != -1 and not _is_inside_color_tag(text, func_pos):
+		var after_func = func_pos + 5
+		while after_func < text.length() and text[after_func] == ' ':
+			after_func += 1
+		
+		var name_start = after_func
+		var name_end = name_start
+		while name_end < text.length() and (text[name_end].is_valid_identifier() or text[name_end] == '_'):
+			name_end += 1
+		
+		if name_end > name_start:
+			var func_name = text.substr(name_start, name_end - name_start)
+			var colored_name = "[color=#FFB347]%s[/color]" % func_name
+			return text.substr(0, name_start) + colored_name + text.substr(name_end)
+	return text
+
+func _replace_whole_word(text: String, word: String, replacement: String) -> String:
+	var result = text
+	var pos = 0
+	while pos < result.length():
+		pos = result.find(word, pos)
+		if pos == -1:
+			break
+		
+		if _is_word_boundary_before(result, pos) and _is_word_boundary_after(result, pos + word.length()) and not _is_inside_color_tag(result, pos):
+			result = result.substr(0, pos) + replacement + result.substr(pos + word.length())
+			pos += replacement.length()
+		else:
+			pos += 1
+	return result
+
+func _is_word_boundary_before(text: String, pos: int) -> bool:
+	if pos == 0:
+		return true
+	var prev_char = text[pos - 1]
+	return not (prev_char.is_valid_identifier() or prev_char == '_')
+
+func _is_word_boundary_after(text: String, pos: int) -> bool:
+	if pos >= text.length():
+		return true
+	var next_char = text[pos]
+	return not (next_char.is_valid_identifier() or next_char == '_')
+
+func _is_inside_color_tag(text: String, pos: int) -> bool:
+	var check_pos = pos - 1
+	while check_pos >= 0:
+		if text.substr(check_pos, 8) == "[/color]":
+			return false
+		if text.substr(check_pos, 7) == "[color=":
+			return true
+		check_pos -= 1
+	return false
 
 func _create_script(args: Array) -> String:
 	if args.size() == 0:
@@ -303,7 +542,7 @@ func _process(delta):
 	if file:
 		file.store_string(script_content)
 		file.close()
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Created script: %s (extends %s)" % [file_name, extends_type]
 	else:
 		return "Error: Failed to create script"
@@ -336,7 +575,7 @@ script = ExtResource("1_0")
 	if scene_file:
 		scene_file.store_string(scene_content)
 		scene_file.close()
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Created scene: %s with script: %s" % [file_name, script_name]
 	else:
 		return "Error: Failed to create scene file"
@@ -358,7 +597,7 @@ func _create_resource(args: Array) -> String:
 	if file:
 		file.store_string(resource_content)
 		file.close()
-		EditorInterface.get_resource_filesystem().scan()
+		_refresh_filesystem([])
 		return "Created resource: %s" % file_name
 	else:
 		return "Error: Failed to create resource"
@@ -368,13 +607,49 @@ func _open_file(args: Array) -> String:
 		return "Usage: open <filename>"
 	
 	var file_name = args[0]
-	var full_path = "res://" + file_name
+	var full_path = current_directory.path_join(file_name)
 	
-	if FileAccess.file_exists(full_path):
+	if not FileAccess.file_exists(full_path):
+		return "Error: File not found - %s" % full_path
+	
+	var extension = file_name.get_extension().to_lower()
+	
+	if extension == "tscn":
 		EditorInterface.open_scene_from_path(full_path)
-		return "Opened: %s" % file_name
+		return "Opened scene: %s" % file_name
+	elif extension == "gd" or extension == "cs":
+		var script = load(full_path)
+		if script:
+			EditorInterface.edit_script(script)
+			return "Opened script: %s" % file_name
+		else:
+			return "Error: Could not load script - %s" % file_name
+	elif extension == "tres":
+		var resource = load(full_path)
+		if resource:
+			EditorInterface.edit_resource(resource)
+			return "Opened resource: %s" % file_name
+		else:
+			return "Error: Could not load resource - %s" % file_name
+	elif extension in ["txt", "md", "json", "xml", "yaml", "yml", "cfg", "ini", "log"]:
+		var file = FileAccess.open(full_path, FileAccess.READ)
+		if file:
+			var content = file.get_as_text()
+			file.close()
+			var preview = content.substr(0, min(500, content.length()))
+			if content.length() > 500:
+				preview += "\n... (truncated, %d total characters)" % content.length()
+			return "Content of %s:\n%s" % [file_name, preview]
+		else:
+			return "Error: Could not read file - %s" % file_name
 	else:
-		return "Error: File not found"
+		var file = FileAccess.open(full_path, FileAccess.READ)
+		if file:
+			var size = file.get_length()
+			file.close()
+			return "File info: %s (%d bytes)\nUse 'cat %s' to view content or open externally" % [file_name, size, file_name]
+		else:
+			return "Error: Cannot access file - %s" % file_name
 
 func _list_node_types(args: Array) -> String:
 	var valid_types = ["Node", "Node2D", "Node3D", "Control", "CanvasItem", "CanvasLayer", "Viewport", "Window", "SubViewport", "Area2D", "Area3D", "CollisionShape2D", "CollisionShape3D", "Sprite2D", "Sprite3D", "Label", "Button", "LineEdit", "TextEdit", "RichTextLabel", "Panel", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "MarginContainer", "ScrollContainer", "TabContainer", "SplitContainer", "AspectRatioContainer", "TextureRect", "ColorRect", "NinePatchRect", "ProgressBar", "Slider", "SpinBox", "CheckBox", "CheckButton", "OptionButton", "ItemList", "Tree", "TreeItem", "FileDialog", "ColorPicker", "ColorPickerButton", "MenuButton", "PopupMenu", "MenuBar", "ToolButton", "LinkButton", "TextureButton", "TextureProgressBar", "AnimationPlayer", "AnimationTree", "Tween", "Timer", "Camera2D", "Camera3D", "Light2D", "Light3D", "AudioStreamPlayer", "AudioStreamPlayer2D", "AudioStreamPlayer3D", "AudioListener2D", "AudioListener3D", "RigidBody2D", "RigidBody3D", "CharacterBody2D", "CharacterBody3D", "StaticBody2D", "StaticBody3D", "KinematicBody2D", "KinematicBody3D", "Path2D", "Path3D", "NavigationAgent2D", "NavigationAgent3D", "NavigationRegion2D", "NavigationRegion3D", "NavigationPolygon", "NavigationMesh", "NavigationLink2D", "NavigationLink3D", "NavigationObstacle2D", "NavigationObstacle3D", "NavigationPathQueryParameters2D", "NavigationPathQueryParameters3D", "NavigationPathQueryResult2D", "NavigationPathQueryResult3D", "NavigationMeshSourceGeometry2D", "NavigationMeshSourceGeometry3D", "NavigationMeshSourceGeometryData2D", "NavigationMeshSourceGeometryData3D"]
