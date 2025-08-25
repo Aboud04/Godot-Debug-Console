@@ -9,7 +9,6 @@ var console_visible: bool = false
 
 func _enter_tree():
 	editor_console_panel = preload("res://addons/debug_console/editor/EditorConsole.tscn").instantiate()
-	
 	DebugCore.initialize_for_editor(editor_console_panel)
 	
 	builtin_commands = preload("res://addons/debug_console/core/BuiltInCommands.gd").new()
@@ -27,7 +26,7 @@ func _exit_tree():
 	if editor_console_panel:
 		remove_control_from_bottom_panel(editor_console_panel)
 		editor_console_panel.queue_free()
-
+	
 func _add_toggle_shortcut():
 	var toggle_shortcut = InputEventKey.new()
 	toggle_shortcut.keycode = KEY_QUOTELEFT
