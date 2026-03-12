@@ -4,6 +4,19 @@ class_name BuiltInCommands extends RefCounted
 #region BuiltInCommands
 var _registry: Node
 var _core: Node
+var _aliases: Dictionary = {}
+var _registered_alias_names: Array[String] = []
+var _active_alias_calls: Array[String] = []
+
+const ALIAS_CONFIG_PATH := "user://debug_console_aliases.cfg"
+const CONSOLE_CONFIG_PATH := "user://debug_console_config.cfg"
+const CONSOLE_CONFIG_SECTION := "console"
+
+const _DEFAULT_CONSOLE_CONFIG := {
+	"opacity": 0.85,
+	"font_size": 14,
+	"height": 400,
+}
 
 func initialize(registry: Node, core: Node) -> void:
 	_registry = registry
@@ -87,6 +100,15 @@ func register_universal_commands():
 	_registry.register_command("scene_tree", _cmd_scene_tree, "Print scene tree as ASCII tree", "both")
 	_registry.register_command("watch", _cmd_watch, "Monitor Engine or node properties", "both")
 	_registry.register_command("save_log", _save_log, "Export the current session log to a file", "both")
+	_registry.register_command("inspect", _cmd_inspect, "Dump all properties of a node, autoload, or Engine", "both")
+	_registry.register_command("get", _cmd_get, "Read a live property by selector: <target>.<property>", "both")
+	_registry.register_command("set", _cmd_set, "Set a live property value: <target>.<property> <value>", "both")
+	_registry.register_command("alias", _cmd_alias, "Create/list persistent aliases", "both")
+	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
+	_registry.register_command("benchmark", _cmd_benchmark, "Benchmark a command: benchmark [iterations] <command>", "both")
+	_registry.register_command("config", _cmd_config, "Manage persistent console settings", "both")
+	_load_aliases_from_config()
+	_register_alias_commands()
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -170,6 +192,366 @@ func _watch_list() -> String:
 			str(watch_entry.get("last_value", ""))
 		])
 	return "\n".join(lines)
+
+func _cmd_inspect(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: inspect <node_path|autoload_name|Engine>"
+
+	var path := " ".join(args).strip_edges()
+	var result: Dictionary = _core.inspect_node(path)
+	if not bool(result.get("ok", false)):
+		return str(result.get("result", "Error: inspect failed"))
+
+	var display_path := str(result.get("display_path", path))
+	var class_name_str := str(result.get("class_name", "?"))
+	var properties: Array = result.get("properties", [])
+
+	var lines: Array[String] = []
+	lines.append("=== %s ===" % display_path)
+	lines.append("Class: %s  |  Properties: %d" % [class_name_str, properties.size()])
+	lines.append("─────────────────────────────────────────────────")
+	for prop in properties:
+		lines.append("  [%-8s] %-24s = %s" % [
+			_inspect_type_name(int(prop.get("type", 0))),
+			str(prop.get("name", "")),
+			str(prop.get("value", "null"))
+		])
+	return "\n".join(lines)
+
+func _inspect_type_name(type_id: int) -> String:
+	match type_id:
+		TYPE_BOOL: return "Bool"
+		TYPE_INT: return "Int"
+		TYPE_FLOAT: return "Float"
+		TYPE_STRING: return "String"
+		TYPE_VECTOR2: return "Vector2"
+		TYPE_VECTOR2I: return "Vector2i"
+		TYPE_RECT2: return "Rect2"
+		TYPE_VECTOR3: return "Vector3"
+		TYPE_VECTOR3I: return "Vector3i"
+		TYPE_TRANSFORM2D: return "Xform2D"
+		TYPE_COLOR: return "Color"
+		TYPE_STRING_NAME: return "SName"
+		TYPE_NODE_PATH: return "NodePath"
+		TYPE_RID: return "RID"
+		TYPE_OBJECT: return "Object"
+		TYPE_CALLABLE: return "Callable"
+		TYPE_SIGNAL: return "Signal"
+		TYPE_DICTIONARY: return "Dict"
+		TYPE_ARRAY: return "Array"
+		TYPE_PACKED_BYTE_ARRAY: return "ByteArr"
+		TYPE_PACKED_STRING_ARRAY: return "StrArr"
+		TYPE_TRANSFORM3D: return "Xform3D"
+		TYPE_BASIS: return "Basis"
+		_: return "Variant"
+
+func _cmd_get(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: get <target>.<property_path>"
+
+	var selector := " ".join(args).strip_edges()
+	var result: Dictionary = _core.get_live_property(selector)
+	if not bool(result.get("ok", false)):
+		return str(result.get("result", "Error: get failed"))
+
+	return "%s = %s" % [
+		str(result.get("selector", selector)),
+		str(result.get("value", "<null>"))
+	]
+
+func _cmd_set(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.size() < 2:
+		return "Usage: set <target>.<property_path> <value>"
+
+	var selector := str(args[0]).strip_edges()
+	var raw_value := " ".join(args.slice(1)).strip_edges()
+	if raw_value.is_empty():
+		return "Usage: set <target>.<property_path> <value>"
+
+	var result: Dictionary = _core.set_live_property(selector, raw_value)
+	if not bool(result.get("ok", false)):
+		return str(result.get("result", "Error: set failed"))
+
+	return "Set %s: %s -> %s" % [
+		str(result.get("selector", selector)),
+		str(result.get("old_value", "<null>")),
+		str(result.get("new_value", "<null>"))
+	]
+
+func _cmd_alias(args: Array) -> String:
+	_ensure_dependencies()
+	if not _registry:
+		return "Error: CommandRegistry is unavailable"
+
+	if args.is_empty():
+		if _aliases.is_empty():
+			return "No aliases configured"
+		var keys := _aliases.keys()
+		keys.sort()
+		var lines: Array[String] = ["Aliases:"]
+		for key in keys:
+			lines.append("  %s='%s'" % [str(key), str(_aliases[key])])
+		return "\n".join(lines)
+
+	if args.size() == 1:
+		var lookup := str(args[0]).to_lower()
+		if not _aliases.has(lookup):
+			return "Alias not found: %s" % lookup
+		return "%s='%s'" % [lookup, str(_aliases[lookup])]
+
+	var alias_name := str(args[0]).strip_edges().to_lower()
+	if alias_name.is_empty() or alias_name.contains(" ") or alias_name.contains("|"):
+		return "Error: Invalid alias name"
+
+	if alias_name == "alias" or alias_name == "unalias":
+		return "Error: Reserved alias name: %s" % alias_name
+
+	if _registry._commands.has(alias_name) and not _aliases.has(alias_name):
+		return "Error: Command already exists: %s" % alias_name
+
+	var expansion := " ".join(args.slice(1)).strip_edges()
+	if expansion.is_empty():
+		return "Usage: alias <name> <command>"
+
+	# Prevent direct self-recursion at definition time.
+	if expansion == alias_name or expansion.begins_with(alias_name + " "):
+		return "Error: Alias cannot reference itself"
+
+	_aliases[alias_name] = expansion
+	_register_single_alias_command(alias_name)
+	_save_aliases_to_config()
+	return "Alias set: %s='%s'" % [alias_name, expansion]
+
+func _cmd_unalias(args: Array) -> String:
+	_ensure_dependencies()
+	if args.is_empty():
+		return "Usage: unalias <name>"
+
+	var alias_name := str(args[0]).strip_edges().to_lower()
+	if not _aliases.has(alias_name):
+		return "Alias not found: %s" % alias_name
+
+	_aliases.erase(alias_name)
+	_unregister_single_alias_command(alias_name)
+	_save_aliases_to_config()
+	return "Alias removed: %s" % alias_name
+
+func _execute_alias(args: Array, alias_name: String) -> String:
+	if not _registry:
+		return "Error: CommandRegistry is unavailable"
+	if not _aliases.has(alias_name):
+		return "Error: Alias not found: %s" % alias_name
+
+	if _active_alias_calls.has(alias_name):
+		return "Error: Alias recursion detected: %s" % alias_name
+
+	_active_alias_calls.append(alias_name)
+	var expansion := str(_aliases.get(alias_name, ""))
+	var suffix := " ".join(args).strip_edges()
+	var full_command := expansion if suffix.is_empty() else "%s %s" % [expansion, suffix]
+	var result: String = _registry.execute_command(full_command)
+	_active_alias_calls.erase(alias_name)
+	return result
+
+func _cmd_benchmark(args: Array) -> String:
+	_ensure_dependencies()
+	if not _registry:
+		return "Error: CommandRegistry is unavailable"
+	if args.is_empty():
+		return "Usage: benchmark [iterations] <command>"
+
+	var iterations := 10
+	var command_parts := args.duplicate()
+	if not command_parts.is_empty() and str(command_parts[0]).is_valid_int():
+		iterations = int(str(command_parts[0]))
+		command_parts = command_parts.slice(1)
+
+	if iterations <= 0:
+		return "Error: iterations must be > 0"
+	if command_parts.is_empty():
+		return "Usage: benchmark [iterations] <command>"
+
+	var command_to_run := " ".join(command_parts).strip_edges()
+	if command_to_run.begins_with("\"") and command_to_run.ends_with("\"") and command_to_run.length() >= 2:
+		command_to_run = command_to_run.substr(1, command_to_run.length() - 2)
+	if command_to_run.is_empty():
+		return "Usage: benchmark [iterations] <command>"
+	if command_to_run.begins_with("benchmark"):
+		return "Error: benchmark cannot run benchmark recursively"
+
+	var min_us := 9223372036854775807
+	var max_us := 0
+	var total_us := 0
+	var last_result := ""
+
+	for i in range(iterations):
+		var started := Time.get_ticks_usec()
+		last_result = _registry.execute_command(command_to_run)
+		var elapsed := Time.get_ticks_usec() - started
+		if elapsed < min_us:
+			min_us = elapsed
+		if elapsed > max_us:
+			max_us = elapsed
+		total_us += elapsed
+
+	var avg_us := int(total_us / iterations)
+	return "Benchmark '%s' iterations=%d avg=%.3fms min=%.3fms max=%.3fms%s" % [
+		command_to_run,
+		iterations,
+		float(avg_us) / 1000.0,
+		float(min_us) / 1000.0,
+		float(max_us) / 1000.0,
+		("\nLast result: %s" % last_result) if not last_result.is_empty() else ""
+	]
+
+func _cmd_config(args: Array) -> String:
+	if args.is_empty():
+		return _config_list()
+
+	var action := str(args[0]).to_lower()
+	match action:
+		"list":
+			return _config_list()
+		"get":
+			if args.size() < 2:
+				return "Usage: config get <key>"
+			var key := str(args[1]).to_lower()
+			if not _DEFAULT_CONSOLE_CONFIG.has(key):
+				return "Error: Unknown config key: %s" % key
+			var values := _load_console_config_values()
+			return "config %s = %s" % [key, str(values.get(key, _DEFAULT_CONSOLE_CONFIG[key]))]
+		"set":
+			if args.size() < 3:
+				return "Usage: config set <key> <value>"
+			var key := str(args[1]).to_lower()
+			if not _DEFAULT_CONSOLE_CONFIG.has(key):
+				return "Error: Unknown config key: %s" % key
+			var raw_value := " ".join(args.slice(2)).strip_edges()
+			var parsed := _parse_config_value(key, raw_value)
+			if not bool(parsed.get("ok", false)):
+				return str(parsed.get("result", "Error: Invalid value"))
+			var values := _load_console_config_values()
+			values[key] = parsed.get("value")
+			_save_console_config_values(values)
+			return "config %s set to %s" % [key, str(values[key])]
+		"reset":
+			if args.size() == 1:
+				_save_console_config_values(_DEFAULT_CONSOLE_CONFIG.duplicate(true))
+				return "config reset to defaults"
+			var key := str(args[1]).to_lower()
+			if not _DEFAULT_CONSOLE_CONFIG.has(key):
+				return "Error: Unknown config key: %s" % key
+			var values := _load_console_config_values()
+			values[key] = _DEFAULT_CONSOLE_CONFIG[key]
+			_save_console_config_values(values)
+			return "config %s reset to %s" % [key, str(values[key])]
+		_:
+			return "Usage: config <list|get|set|reset> ..."
+
+func _config_list() -> String:
+	var values := _load_console_config_values()
+	var keys := values.keys()
+	keys.sort()
+	var lines: Array[String] = ["Console config:"]
+	for key_variant in keys:
+		var key := str(key_variant)
+		lines.append("  %s = %s" % [key, str(values[key])])
+	return "\n".join(lines)
+
+func _load_console_config_values() -> Dictionary:
+	var values := _DEFAULT_CONSOLE_CONFIG.duplicate(true)
+	var config := ConfigFile.new()
+	if config.load(CONSOLE_CONFIG_PATH) != OK:
+		return values
+	if not config.has_section(CONSOLE_CONFIG_SECTION):
+		return values
+	for key_variant in _DEFAULT_CONSOLE_CONFIG.keys():
+		var key := str(key_variant)
+		if config.has_section_key(CONSOLE_CONFIG_SECTION, key):
+			values[key] = config.get_value(CONSOLE_CONFIG_SECTION, key, _DEFAULT_CONSOLE_CONFIG[key])
+	return values
+
+func _save_console_config_values(values: Dictionary) -> void:
+	var config := ConfigFile.new()
+	for key_variant in _DEFAULT_CONSOLE_CONFIG.keys():
+		var key := str(key_variant)
+		config.set_value(CONSOLE_CONFIG_SECTION, key, values.get(key, _DEFAULT_CONSOLE_CONFIG[key]))
+	config.save(CONSOLE_CONFIG_PATH)
+
+func _parse_config_value(key: String, raw_value: String) -> Dictionary:
+	var default_value = _DEFAULT_CONSOLE_CONFIG[key]
+	if default_value is float:
+		if not raw_value.is_valid_float():
+			return {"ok": false, "result": "Error: %s expects a float" % key}
+		return {"ok": true, "value": float(raw_value)}
+	if default_value is int:
+		if not raw_value.is_valid_int():
+			return {"ok": false, "result": "Error: %s expects an int" % key}
+		return {"ok": true, "value": int(raw_value)}
+	return {"ok": true, "value": raw_value}
+
+func _register_alias_commands() -> void:
+	if not _registry:
+		return
+	for alias_name in _registered_alias_names:
+		_registry.unregister_command(alias_name)
+	_registered_alias_names.clear()
+
+	for alias_name_variant in _aliases.keys():
+		_register_single_alias_command(str(alias_name_variant))
+
+func _register_single_alias_command(alias_name: String) -> void:
+	if not _registry:
+		return
+	if alias_name.is_empty():
+		return
+
+	# Do not let aliases override built-in commands, except updating existing alias entries.
+	if _registry._commands.has(alias_name) and not _registered_alias_names.has(alias_name):
+		return
+
+	var callable := Callable(self, "_execute_alias").bind(alias_name)
+	_registry.register_command(alias_name, callable, "Alias for: %s" % str(_aliases.get(alias_name, "")), "both")
+	if not _registered_alias_names.has(alias_name):
+		_registered_alias_names.append(alias_name)
+
+func _unregister_single_alias_command(alias_name: String) -> void:
+	if not _registry:
+		return
+	_registry.unregister_command(alias_name)
+	_registered_alias_names.erase(alias_name)
+
+func _load_aliases_from_config() -> void:
+	_aliases.clear()
+	var config := ConfigFile.new()
+	var err := config.load(ALIAS_CONFIG_PATH)
+	if err != OK:
+		return
+	if not config.has_section("aliases"):
+		return
+
+	for key in config.get_section_keys("aliases"):
+		var alias_name := str(key).to_lower()
+		var expansion := str(config.get_value("aliases", key, "")).strip_edges()
+		if alias_name.is_empty() or expansion.is_empty():
+			continue
+		_aliases[alias_name] = expansion
+
+func _save_aliases_to_config() -> void:
+	var config := ConfigFile.new()
+	for alias_name_variant in _aliases.keys():
+		var alias_name := str(alias_name_variant)
+		config.set_value("aliases", alias_name, str(_aliases[alias_name]))
+	config.save(ALIAS_CONFIG_PATH)
 #endregion
 
 #region Editor commands

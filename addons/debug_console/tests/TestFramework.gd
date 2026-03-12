@@ -350,6 +350,264 @@ func run_builtin_commands_tests():
 		cleanup_test_file(filename)
 		return result.contains("Saved 1 log entries to: " + full_path) and content.contains("SaveLog built-in test line")
 	)
+
+	# --- inspect tests ---
+	test("Built-in Commands - Inspect Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("inspect")
+	)
+
+	test("Built-in Commands - Inspect Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect([])
+		return result == "Usage: inspect <node_path|autoload_name|Engine>"
+	)
+
+	test("Built-in Commands - Inspect Engine Singleton", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["Engine"])
+		return result.contains("=== Engine ===") and result.contains("Class: Engine")
+	)
+
+	test("Built-in Commands - Inspect Engine Shows Properties", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["Engine"])
+		# Engine always exposes max_fps, time_scale, physics_ticks_per_second, etc.
+		return result.contains("max_fps") or result.contains("time_scale") or result.contains("Properties:")
+	)
+
+	test("Built-in Commands - Inspect Invalid Path Returns Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["NonExistentNodeXYZZY_9999"])
+		return result.begins_with("Error:")
+	)
+
+	test("Built-in Commands - Inspect DebugCore By Short Name", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["DebugCore"])
+		return result.contains("DebugCore") and not result.begins_with("Error:")
+	)
+
+	test("Built-in Commands - Inspect DebugCore By Absolute Path", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["/root/DebugCore"])
+		return result.contains("DebugCore") and not result.begins_with("Error:")
+	)
+
+	test("Built-in Commands - Inspect Shows max_history_size Property", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["DebugCore"])
+		# max_history_size is a declared @export-style var in DebugCore
+		return result.contains("max_history_size")
+	)
+
+	# --- get/set tests ---
+	test("Built-in Commands - Get Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("get")
+	)
+
+	test("Built-in Commands - Set Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("set")
+	)
+
+	test("Built-in Commands - Get Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_get([])
+		return result == "Usage: get <target>.<property_path>"
+	)
+
+	test("Built-in Commands - Set Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_set(["DebugCore.max_history_size"])
+		return result == "Usage: set <target>.<property_path> <value>"
+	)
+
+	test("Built-in Commands - Get DebugCore Property", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_get(["DebugCore.max_history_size"])
+		return result.begins_with("DebugCore.max_history_size = ")
+	)
+
+	test("Built-in Commands - Set DebugCore Int Property", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var original_value = core.max_history_size
+		var set_result = commands._cmd_set(["DebugCore.max_history_size", "1234"])
+		var get_result = commands._cmd_get(["DebugCore.max_history_size"])
+		core.max_history_size = original_value
+		return set_result.contains("Set DebugCore.max_history_size") and get_result.contains("1234")
+	)
+
+	test("Built-in Commands - Set Engine Float Property", func():
+		var commands = BuiltInCommands.new()
+		var original_value = Engine.time_scale
+		var set_result = commands._cmd_set(["Engine.time_scale", "0.75"])
+		var get_result = commands._cmd_get(["Engine.time_scale"])
+		Engine.time_scale = original_value
+		return set_result.contains("Set Engine.time_scale") and get_result.contains("0.75")
+	)
+
+	test("Built-in Commands - Set Invalid Type Rejected", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_set(["DebugCore.max_history_size", "not_an_int"])
+		return result.begins_with("Error: Invalid int value:")
+	)
+
+	test("Built-in Commands - Get Invalid Selector", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_get(["DebugCore"])
+		return result == "Usage: <target>.<property_path>"
+	)
+
+	test("Built-in Commands - Set Unknown Target", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_set(["MissingTarget.value", "1"])
+		return result == "Error: Target not found"
+	)
+
+	# --- alias/unalias tests ---
+	test("Built-in Commands - Alias Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("alias") and registry._commands.has("unalias")
+	)
+
+	test("Built-in Commands - Alias Usage And Execution", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_unalias(["techo"])
+		var set_result = commands._cmd_alias(["techo", "echo"])
+		var run_result = registry.execute_command("techo hello")
+		commands._cmd_unalias(["techo"])
+		return set_result.begins_with("Alias set:") and run_result == "hello"
+	)
+
+	test("Built-in Commands - Unalias Removes Command", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_alias(["techo", "echo"])
+		var remove_result = commands._cmd_unalias(["techo"])
+		var run_result = registry.execute_command("techo hello")
+		return remove_result == "Alias removed: techo" and run_result == "Unknown command: techo"
+	)
+
+	test("Built-in Commands - Alias Persists To ConfigFile", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_unalias(["tpersist"])
+		var set_result = commands._cmd_alias(["tpersist", "echo persistent"])
+		var cfg = ConfigFile.new()
+		var load_err = cfg.load("user://debug_console_aliases.cfg")
+		var saved = load_err == OK and str(cfg.get_value("aliases", "tpersist", "")) == "echo persistent"
+		commands._cmd_unalias(["tpersist"])
+		return set_result.begins_with("Alias set:") and saved
+	)
+
+	test("Built-in Commands - Alias Reload From ConfigFile", func():
+		var commands_a = BuiltInCommands.new()
+		commands_a._cmd_unalias(["treload"])
+		commands_a._cmd_alias(["treload", "echo reload_ok"])
+
+		var commands_b = BuiltInCommands.new()
+		commands_b._ensure_dependencies()
+		commands_b._load_aliases_from_config()
+		commands_b._register_alias_commands()
+		var run_result = registry.execute_command("treload")
+
+		commands_b._cmd_unalias(["treload"])
+		return run_result == "reload_ok"
+	)
+	# --- end alias/unalias tests ---
+
+	# --- benchmark tests ---
+	test("Built-in Commands - Benchmark Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("benchmark")
+	)
+
+	test("Built-in Commands - Benchmark Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark([])
+		return result == "Usage: benchmark [iterations] <command>"
+	)
+
+	test("Built-in Commands - Benchmark Invalid Iterations", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark(["0", "echo", "ok"])
+		return result == "Error: iterations must be > 0"
+	)
+
+	test("Built-in Commands - Benchmark Echo Command", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark(["3", "echo", "bench_ok"])
+		return result.contains("Benchmark 'echo bench_ok' iterations=3") and result.contains("avg=") and result.contains("min=") and result.contains("max=") and result.contains("Last result: bench_ok")
+	)
+
+	test("Built-in Commands - Benchmark Recursive Guard", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark(["benchmark", "echo", "nope"])
+		return result == "Error: benchmark cannot run benchmark recursively"
+	)
+	# --- end benchmark tests ---
+
+	# --- config tests ---
+	test("Built-in Commands - Config Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("config")
+	)
+
+	test("Built-in Commands - Config Usage", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_config(["unknown"])
+		return result == "Usage: config <list|get|set|reset> ..."
+	)
+
+	test("Built-in Commands - Config Set And Get", func():
+		var commands = BuiltInCommands.new()
+		var set_result = commands._cmd_config(["set", "opacity", "0.7"])
+		var get_result = commands._cmd_config(["get", "opacity"])
+		commands._cmd_config(["reset", "opacity"])
+		return set_result == "config opacity set to 0.7" and get_result == "config opacity = 0.7"
+	)
+
+	test("Built-in Commands - Config Reset Key", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_config(["set", "font_size", "22"])
+		var reset_result = commands._cmd_config(["reset", "font_size"])
+		var get_result = commands._cmd_config(["get", "font_size"])
+		return reset_result == "config font_size reset to 14" and get_result == "config font_size = 14"
+	)
+
+	test("Built-in Commands - Config Persists To File", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_config(["set", "height", "420"])
+		var cfg := ConfigFile.new()
+		var load_err := cfg.load("user://debug_console_config.cfg")
+		var persisted := load_err == OK and int(cfg.get_value("console", "height", 0)) == 420
+		commands._cmd_config(["reset", "height"])
+		return persisted
+	)
+	# --- end config tests ---
+	# --- end get/set tests ---
+	# --- end inspect tests ---
 	
 	if Engine.is_editor_hint():
 		test("Built-in Commands - List Files", func():
