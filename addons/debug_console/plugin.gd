@@ -99,6 +99,8 @@ func show_console():
 		return
 	
 	editor_dock.make_visible()
+	if editor_console_panel and editor_console_panel.has_method("focus_command_input"):
+		editor_console_panel.call_deferred("focus_command_input")
 	console_visible = true
 
 func hide_console():

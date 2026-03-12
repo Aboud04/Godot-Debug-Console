@@ -80,8 +80,38 @@ func _add_to_history(message: String):
 func get_history() -> Array[String]:
 	return _message_history.duplicate()
 
+func get_history_text() -> String:
+	return "\n".join(_message_history)
+
 func clear_history():
 	_message_history.clear()
+
+func save_history_to_file(file_path: String) -> Dictionary:
+	var normalized_path := file_path.strip_edges()
+	if normalized_path.is_empty():
+		return {"ok": false, "result": "Error: File path is empty"}
+
+	var base_dir := normalized_path.get_base_dir()
+	if not base_dir.is_empty() and base_dir != "res://" and base_dir != "user://":
+		var ensure_result := DirAccess.make_dir_recursive_absolute(base_dir)
+		if ensure_result != OK:
+			return {
+				"ok": false,
+				"result": "Error: Failed to create directory: %s" % base_dir
+			}
+
+	var file := FileAccess.open(normalized_path, FileAccess.WRITE)
+	if not file:
+		return {"ok": false, "result": "Error: Failed to open log file: %s" % normalized_path}
+
+	file.store_string(get_history_text())
+	file.close()
+
+	return {
+		"ok": true,
+		"path": normalized_path,
+		"count": _message_history.size(),
+	}
 
 func add_watch(expression: String) -> Dictionary:
 	var normalized_expression := expression.strip_edges()
