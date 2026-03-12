@@ -2,6 +2,11 @@
 extends Control
 class_name GameConsole
 
+const LOG_LEVEL_INFO := 0
+const LOG_LEVEL_WARNING := 1
+const LOG_LEVEL_ERROR := 2
+const LOG_LEVEL_SUCCESS := 3
+
 @onready var background: ColorRect = $Background
 @onready var output_text: RichTextLabel = $VBox/OutputText
 @onready var input_container: HBoxContainer = $VBox/InputContainer
@@ -12,6 +17,9 @@ var command_history: Array[String] = []
 var history_index: int = -1
 var is_animating: bool = false
 var target_height: float = 400.0
+
+func _command_registry() -> Node:
+	return get_node_or_null("/root/CommandRegistry")
 
 func _ready():
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
@@ -107,16 +115,21 @@ func _execute_command(command: String):
 	command_history.append(command)
 	history_index = command_history.size()
 	
-	add_log_message("> " + command, DebugCore.LogLevel.INFO)
+	add_log_message("> " + command, LOG_LEVEL_INFO)
 	
-	var result = CommandRegistry.execute_command(command)
+	var registry := _command_registry()
+	if not registry:
+		add_log_message("Command registry is not available.", LOG_LEVEL_ERROR)
+		return
+
+	var result = registry.execute_command(command)
 	if not result.is_empty():
-		add_log_message(result, DebugCore.LogLevel.INFO)
+		add_log_message(result, LOG_LEVEL_INFO)
 	
 	input_line.clear()
 	input_line.grab_focus()
 
-func add_log_message(message: String, level: DebugCore.LogLevel = DebugCore.LogLevel.INFO):
+func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 	if not output_text:
 		return
 	
@@ -127,12 +140,12 @@ func clear_output():
 	if output_text:
 		output_text.clear()
 
-func _get_level_color(level: DebugCore.LogLevel) -> String:
+func _get_level_color(level: int) -> String:
 	match level:
-		DebugCore.LogLevel.INFO: return "#808080"
-		DebugCore.LogLevel.WARNING: return "#FFAA00"
-		DebugCore.LogLevel.ERROR: return "#FF4444"
-		DebugCore.LogLevel.SUCCESS: return "#44FF44"
+		LOG_LEVEL_INFO: return "#808080"
+		LOG_LEVEL_WARNING: return "#FFAA00"
+		LOG_LEVEL_ERROR: return "#FF4444"
+		LOG_LEVEL_SUCCESS: return "#44FF44"
 		_: return "#FFFFFF"
 
 func _navigate_history(direction: int):

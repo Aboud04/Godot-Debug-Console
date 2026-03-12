@@ -2,6 +2,11 @@
 extends Control
 class_name EditorConsole
 
+const LOG_LEVEL_INFO := 0
+const LOG_LEVEL_WARNING := 1
+const LOG_LEVEL_ERROR := 2
+const LOG_LEVEL_SUCCESS := 3
+
 @onready var output_text: RichTextLabel = $VBox/OutputPanel/OutputText
 @onready var input_line: LineEdit = $VBox/InputPanel/InputLine
 @onready var send_button: Button = $VBox/InputPanel/SendButton
@@ -16,6 +21,9 @@ var current_autocomplete_options: Array[String] = []
 var _last_autocomplete_word: String = ""
 var _matching_commands: Array[String] = []
 var _autocomplete_mode: String = "commands"
+
+func _command_registry() -> Node:
+	return get_node_or_null("/root/CommandRegistry")
 
 func _ready():
 	if not Engine.is_editor_hint():
@@ -32,7 +40,14 @@ func _ready():
 	output_text.bbcode_enabled = true
 	output_text.scroll_following = true
 	
-	add_log_message("Editor Debug Console Ready", DebugCore.LogLevel.SUCCESS)
+	add_log_message("Editor Debug Console Ready", LOG_LEVEL_SUCCESS)
+
+func focus_command_input():
+	if not is_inside_tree() or not input_line:
+		return
+
+	input_line.grab_focus()
+	input_line.caret_column = input_line.text.length()
 
 func _on_send_pressed():
 	_execute_command(input_line.text)
@@ -47,11 +62,17 @@ func _execute_command(command: String):
 	command_history.append(command)
 	history_index = command_history.size()
 	
-	add_log_message("> " + command, DebugCore.LogLevel.INFO)
+	add_log_message("> " + command, LOG_LEVEL_INFO)
 	
-	var result = CommandRegistry.execute_command(command)
-	if not result.is_empty():
-		add_log_message(result, DebugCore.LogLevel.INFO)
+	var registry := _command_registry()
+	if not registry:
+		add_log_message("Command registry is not available.", LOG_LEVEL_ERROR)
+		return
+
+	var result = registry.execute_command(command)
+	var result_text = "" if result == null else str(result)
+	if not result_text.is_empty():
+		add_log_message(result_text, LOG_LEVEL_INFO)
 	
 	input_line.clear()
 	
@@ -62,7 +83,7 @@ func _execute_command(command: String):
 	
 	input_line.grab_focus()
 
-func add_log_message(message: String, level: DebugCore.LogLevel = DebugCore.LogLevel.INFO):
+func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 	if not output_text:
 		return
 	
@@ -83,19 +104,19 @@ func clear_output():
 	if output_text:
 		output_text.clear()
 
-func _get_level_color(level: DebugCore.LogLevel) -> String:
+func _get_level_color(level: int) -> String:
 	match level:
-		DebugCore.LogLevel.INFO: return "#808080"
-		DebugCore.LogLevel.WARNING: return "#FFAA00"
-		DebugCore.LogLevel.ERROR: return "#FF4444"
-		DebugCore.LogLevel.SUCCESS: return "#44FF44"
+		LOG_LEVEL_INFO: return "#808080"
+		LOG_LEVEL_WARNING: return "#FFAA00"
+		LOG_LEVEL_ERROR: return "#FF4444"
+		LOG_LEVEL_SUCCESS: return "#44FF44"
 		_: return "#FFFFFF"
 
 func _on_input_line_gui_input(event):
 	if event is InputEventKey and event.pressed:
 		match event.keycode:
 			KEY_ENTER, KEY_KP_ENTER:
-				send_button.emit_signal("pressed")
+				send_button.pressed.emit()
 				accept_event()
 			KEY_TAB:
 				_autocomplete()
@@ -201,7 +222,8 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	return "commands"
 
 func _get_command_suggestions(current_word: String):
-	current_autocomplete_options = CommandRegistry.get_available_commands()
+	var registry := _command_registry()
+	current_autocomplete_options = registry.get_available_commands() if registry else []
 	var matching_commands: Array[String] = []
 	for cmd in current_autocomplete_options:
 		if cmd.begins_with(current_word):

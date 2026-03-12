@@ -2,79 +2,105 @@
 class_name BuiltInCommands extends RefCounted
 
 #region BuiltInCommands
+var _registry: Node
+var _core: Node
+
+func initialize(registry: Node, core: Node) -> void:
+	_registry = registry
+	_core = core
+
+func _ensure_dependencies() -> void:
+	if _registry and _core:
+		return
+
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return
+
+	if not _registry:
+		_registry = tree.root.get_node_or_null("/root/CommandRegistry")
+	if not _core:
+		_core = tree.root.get_node_or_null("/root/DebugCore")
+
 func register_editor_commands():
+	_ensure_dependencies()
 	register_universal_commands()
 	
-	CommandRegistry.register_command("scene", _get_current_scene, "Get current scene info", "editor")
-	CommandRegistry.register_command("reload", _reload_scene, "Reload current scene", "editor")
+	_registry.register_command("scene", _get_current_scene, "Get current scene info", "editor")
+	_registry.register_command("reload", _reload_scene, "Reload current scene", "editor")
 	
-	CommandRegistry.register_command("ls", _list_files, "List files in current directory", "editor", true)
-	CommandRegistry.register_command("cd", _change_directory, "Change directory", "editor")
-	CommandRegistry.register_command("pwd", _print_working_directory, "Print current working directory", "editor")
-	CommandRegistry.register_command("mkdir", _make_directory, "Create directory", "editor")
-	CommandRegistry.register_command("touch", _create_file, "Create file", "editor")
-	CommandRegistry.register_command("rm", _remove_file, "Remove file or directory", "editor")
-	CommandRegistry.register_command("rmdir", _remove_directory, "Remove directory", "editor")
-	CommandRegistry.register_command("mv", _move_file, "Move/rename file", "editor")
-	CommandRegistry.register_command("cp", _copy_file, "Copy file", "editor")
-	CommandRegistry.register_command("cat", _view_file, "View file contents", "editor", true)
-	CommandRegistry.register_command("refresh", _refresh_filesystem, "Refresh Godot filesystem", "editor")
+	_registry.register_command("ls", _list_files, "List files in current directory", "editor", true)
+	_registry.register_command("cd", _change_directory, "Change directory", "editor")
+	_registry.register_command("pwd", _print_working_directory, "Print current working directory", "editor")
+	_registry.register_command("mkdir", _make_directory, "Create directory", "editor")
+	_registry.register_command("touch", _create_file, "Create file", "editor")
+	_registry.register_command("rm", _remove_file, "Remove file or directory", "editor")
+	_registry.register_command("rmdir", _remove_directory, "Remove directory", "editor")
+	_registry.register_command("mv", _move_file, "Move/rename file", "editor")
+	_registry.register_command("cp", _copy_file, "Copy file", "editor")
+	_registry.register_command("cat", _view_file, "View file contents", "editor", true)
+	_registry.register_command("refresh", _refresh_filesystem, "Refresh Godot filesystem", "editor")
 	
-	CommandRegistry.register_command("find", _find, "Find files by name in current or subdirectories", "editor")
-	CommandRegistry.register_command("grep", _grep, "Search for text inside files", "editor", true)
-	CommandRegistry.register_command("stat", _stat, "Display file information such as size, type, and modification time", "editor")
-	CommandRegistry.register_command("head", _head, "Show first N lines of input or file", "editor", true)
-	CommandRegistry.register_command("tail", _tail, "Show last N lines of input or file", "editor", true)
+	_registry.register_command("find", _find, "Find files by name in current or subdirectories", "editor")
+	_registry.register_command("grep", _grep, "Search for text inside files", "editor", true)
+	_registry.register_command("stat", _stat, "Display file information such as size, type, and modification time", "editor")
+	_registry.register_command("head", _head, "Show first N lines of input or file", "editor", true)
+	_registry.register_command("tail", _tail, "Show last N lines of input or file", "editor", true)
 
 	
-	CommandRegistry.register_command("new_script", _create_script, "Create new script file", "editor")
-	CommandRegistry.register_command("new_scene", _create_scene, "Create new scene file", "editor")
-	CommandRegistry.register_command("new_resource", _create_resource, "Create new resource file", "editor")
-	CommandRegistry.register_command("open", _open_file, "Open file in editor", "editor")
-	CommandRegistry.register_command("node_types", _list_node_types, "List available node types for extends", "editor")
+	_registry.register_command("new_script", _create_script, "Create new script file", "editor")
+	_registry.register_command("new_scene", _create_scene, "Create new scene file", "editor")
+	_registry.register_command("new_resource", _create_resource, "Create new resource file", "editor")
+	_registry.register_command("open", _open_file, "Open file in editor", "editor")
+	_registry.register_command("node_types", _list_node_types, "List available node types for extends", "editor")
 	
-	CommandRegistry.register_command("save_scenes", _save_scene, "Save all open scenes", "editor")
-	CommandRegistry.register_command("run_project", _run_project, "Run the main scene or a specific scene of your choice", "editor")
-	CommandRegistry.register_command("stop_project", _stop_project, "Stop the currently running scene or project", "editor")
+	_registry.register_command("save_scenes", _save_scene, "Save all open scenes", "editor")
+	_registry.register_command("run_project", _run_project, "Run the main scene or a specific scene of your choice", "editor")
+	_registry.register_command("stop_project", _stop_project, "Stop the currently running scene or project", "editor")
 
 	
 	
 	
-	CommandRegistry.register_command("test_commands", _test_commands, "Test command functionality", "editor")
-	CommandRegistry.register_command("test_autocomplete", _test_autocomplete, "Test autocomplete functionality", "editor")
-	CommandRegistry.register_command("test_files", _test_file_operations, "Test file operations", "editor")
-	CommandRegistry.register_command("test_pipes", _test_pipes, "Test command piping functionality", "editor")
-	CommandRegistry.register_command("quick_test", _quick_test, "Run quick test", "editor")
+	_registry.register_command("test_commands", _test_commands, "Test command functionality", "editor")
+	_registry.register_command("test_autocomplete", _test_autocomplete, "Test autocomplete functionality", "editor")
+	_registry.register_command("test_files", _test_file_operations, "Test file operations", "editor")
+	_registry.register_command("test_pipes", _test_pipes, "Test command piping functionality", "editor")
+	_registry.register_command("quick_test", _quick_test, "Run quick test", "editor")
 
 func register_game_commands():
+	_ensure_dependencies()
 	register_universal_commands()
 	
-	CommandRegistry.register_command("fps", _show_fps, "Show FPS information", "game")
-	CommandRegistry.register_command("nodes", _count_nodes, "Count nodes in scene tree", "game")
-	CommandRegistry.register_command("pause", _toggle_pause, "Toggle game pause", "game")
-	CommandRegistry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
+	_registry.register_command("fps", _show_fps, "Show FPS information", "game")
+	_registry.register_command("nodes", _count_nodes, "Count nodes in scene tree", "game")
+	_registry.register_command("pause", _toggle_pause, "Toggle game pause", "game")
+	_registry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
 
 func register_universal_commands():
-	CommandRegistry.register_command("test", _run_tests, "Run all tests", "both")
-	CommandRegistry.register_command("help", _help, "Show available commands", "both")
-	CommandRegistry.register_command("clear", _clear, "Clear console output", "both")
-	CommandRegistry.register_command("history", _show_history, "Show command history", "both")
-	CommandRegistry.register_command("clear_history", _clear_history, "Clear command history", "both")
-	CommandRegistry.register_command("echo", _echo, "Echo text back", "both", true)
+	_ensure_dependencies()
+	_registry.register_command("test", _run_tests, "Run all tests", "both")
+	_registry.register_command("help", _help, "Show available commands", "both")
+	_registry.register_command("clear", _clear, "Clear console output", "both")
+	_registry.register_command("history", _show_history, "Show command history", "both")
+	_registry.register_command("clear_history", _clear_history, "Clear command history", "both")
+	_registry.register_command("echo", _echo, "Echo text back", "both", true)
+	_registry.register_command("scene_tree", _cmd_scene_tree, "Print scene tree as ASCII tree", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
+	_ensure_dependencies()
 	var cmd_name = ""
 	if args.size() > 0:
 		cmd_name = str(args[0])
-	return CommandRegistry.get_command_help(cmd_name)
+	return _registry.get_command_help(cmd_name)
 
 func _clear(args: Array) -> String:
-	DebugCore.clear_history()
-	if Engine.is_editor_hint() and DebugCore.editor_output:
-		DebugCore.editor_output.clear_output()
-	elif DebugCore.game_output:
-		DebugCore.game_output.clear_output()
+	_ensure_dependencies()
+	_core.clear_history()
+	if Engine.is_editor_hint() and _core.editor_output:
+		_core.editor_output.clear_output()
+	elif _core.game_output:
+		_core.game_output.clear_output()
 	
 	return ""
 
@@ -84,7 +110,8 @@ func _echo(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 	return " ".join(args) if args.size() > 0 else "Usage: echo <message>"
 
 func _history(args: Array) -> String:
-	var history = DebugCore.get_history()
+	_ensure_dependencies()
+	var history = _core.get_history()
 	var count = min(10, history.size())
 	if args.size() > 0:
 		count = min(args[0].to_int(), history.size())
@@ -958,7 +985,8 @@ func _stop_project(args: Array) -> String:
 
 #region History commands
 func _show_history(args: Array) -> String:
-	var history = CommandRegistry.get_command_history()
+	_ensure_dependencies()
+	var history = _registry.get_command_history()
 	if history.is_empty():
 		return "Command history is empty"
 	
@@ -969,7 +997,8 @@ func _show_history(args: Array) -> String:
 	return result
 
 func _clear_history(args: Array) -> String:
-	CommandRegistry.clear_command_history()
+	_ensure_dependencies()
+	_registry.clear_command_history()
 	return "History cleared"
 #endregion
 
@@ -1055,5 +1084,42 @@ func _set_time_scale(args: Array) -> String:
 
 #endregion
 
+#region Scene Tree commands
+func _cmd_scene_tree(args: Array) -> String:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return "Error: Scene tree unavailable"
+
+	var target_node: Node = tree.root
+	if not args.is_empty():
+		var target_query := str(args[0])
+		target_node = tree.root.get_node_or_null(NodePath(target_query))
+		if not target_node and not target_query.begins_with("/"):
+			target_node = tree.root.find_child(target_query, true, false)
+		if not target_node:
+			return "Error: Node not found: %s" % target_query
+
+	var tree_lines: Array[String] = []
+	_build_tree_lines(target_node, "", true, tree_lines, true)
+	return "\n".join(tree_lines)
+
+func _build_tree_lines(node: Node, prefix: String, is_last: bool, output: Array[String], is_root: bool = false) -> void:
+	var node_name = node.name if node.name else "<unnamed>"
+	var classname = node.get_class()
+	var branch := ""
+	if not is_root:
+		branch = "└─ " if is_last else "├─ "
+	var line = "%s%s[%s] %s" % [prefix, branch, classname, node_name]
+	output.append(line)
+
+	var next_prefix := prefix
+	if not is_root:
+		next_prefix += "   " if is_last else "│  "
+
+	var children = node.get_children()
+	for i in range(children.size()):
+		var child = children[i]
+		var is_last_child = (i == children.size() - 1)
+		_build_tree_lines(child, next_prefix, is_last_child, output)
 
 #endregion
