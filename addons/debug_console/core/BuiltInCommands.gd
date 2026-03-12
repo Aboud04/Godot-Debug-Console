@@ -85,6 +85,7 @@ func register_universal_commands():
 	_registry.register_command("clear_history", _clear_history, "Clear command history", "both")
 	_registry.register_command("echo", _echo, "Echo text back", "both", true)
 	_registry.register_command("scene_tree", _cmd_scene_tree, "Print scene tree as ASCII tree", "both")
+	_registry.register_command("watch", _cmd_watch, "Monitor Engine or node properties", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -118,6 +119,56 @@ func _history(args: Array) -> String:
 	
 	var recent = history.slice(-count)
 	return "Recent history:\n" + "\n".join(recent)
+
+func _cmd_watch(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+
+	if args.is_empty() or str(args[0]).to_lower() == "list":
+		return _watch_list()
+
+	var subcommand := str(args[0]).to_lower()
+	if subcommand == "clear":
+		var cleared_count = _core.clear_watches()
+		return "Cleared %d watch(es)" % cleared_count
+
+	if subcommand == "remove":
+		if args.size() < 2:
+			return "Usage: watch remove <expression>"
+		var expression_to_remove := " ".join(args.slice(1))
+		if _core.remove_watch(expression_to_remove):
+			return "Removed watch: %s" % expression_to_remove
+		return "Watch not found: %s" % expression_to_remove
+
+	if subcommand == "poll":
+		var updates: Array[String] = _core.poll_watch_expressions(false)
+		if updates.is_empty():
+			return "No watch changes"
+		return "\n".join(updates)
+
+	var expression := " ".join(args).strip_edges()
+	var add_result: Dictionary = _core.add_watch(expression)
+	if not bool(add_result.get("ok", false)):
+		return str(add_result.get("result", "Error: Failed to add watch"))
+
+	return "Watching %s = %s" % [
+		str(add_result.get("expression", expression)),
+		str(add_result.get("value", ""))
+	]
+
+func _watch_list() -> String:
+	var watches: Array[Dictionary] = _core.list_watches()
+	if watches.is_empty():
+		return "No active watches"
+
+	var lines := ["Active watches:"]
+	for watch_entry in watches:
+		lines.append("  %s = %s" % [
+			str(watch_entry.get("expression", "")),
+			str(watch_entry.get("last_value", ""))
+		])
+	return "\n".join(lines)
 #endregion
 
 #region Editor commands

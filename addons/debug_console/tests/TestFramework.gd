@@ -21,6 +21,12 @@ func _registry() -> Node:
 		return null
 	return tree.root.get_node_or_null("/root/CommandRegistry")
 
+func _debug_core() -> Node:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return null
+	return tree.root.get_node_or_null("/root/DebugCore")
+
 func run_all_tests():
 	test_start_time = Time.get_ticks_msec()
 	print("Starting Comprehensive Debug Console Test Suite...")
@@ -204,6 +210,115 @@ func run_builtin_commands_tests():
 		var commands = BuiltInCommands.new()
 		var result = commands._cmd_scene_tree(["DefinitelyMissingSceneTreeNode"])
 		return result == "Error: Node not found: DefinitelyMissingSceneTreeNode"
+	)
+
+	test("Built-in Commands - Watch Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("watch")
+	)
+
+	test("Built-in Commands - Watch Add Node Property", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if core:
+			core.clear_watches()
+		var fixture = _create_watch_fixture()
+		var expression = "%s:process_mode" % fixture.target.get_path()
+		var result = commands._cmd_watch([expression])
+		var passed = result.contains("Watching %s = " % expression)
+		if core:
+			core.clear_watches()
+		_cleanup_watch_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Watch List", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if core:
+			core.clear_watches()
+		var fixture = _create_watch_fixture()
+		var expression = "%s:process_mode" % fixture.target.get_path()
+		commands._cmd_watch([expression])
+		var result = commands._cmd_watch([])
+		var passed = result.contains("Active watches:") and result.contains(expression)
+		if core:
+			core.clear_watches()
+		_cleanup_watch_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Watch Duplicate", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if core:
+			core.clear_watches()
+		var fixture = _create_watch_fixture()
+		var expression = "%s:process_mode" % fixture.target.get_path()
+		commands._cmd_watch([expression])
+		var result = commands._cmd_watch([expression])
+		var passed = result == "Watch already exists: %s" % expression
+		if core:
+			core.clear_watches()
+		_cleanup_watch_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Watch Poll Change Detection", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if not core:
+			return false
+		core.clear_watches()
+		var fixture = _create_watch_fixture()
+		var expression = "%s:process_mode" % fixture.target.get_path()
+		commands._cmd_watch([expression])
+		fixture.target.process_mode = Node.PROCESS_MODE_DISABLED
+		var result = commands._cmd_watch(["poll"])
+		var passed = result.contains("WATCH %s = %s" % [expression, var_to_str(Node.PROCESS_MODE_DISABLED)])
+		core.clear_watches()
+		_cleanup_watch_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Watch Remove And Clear", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if not core:
+			return false
+		core.clear_watches()
+		var fixture = _create_watch_fixture()
+		var expression = "%s:process_mode" % fixture.target.get_path()
+		commands._cmd_watch([expression])
+		var remove_result = commands._cmd_watch(["remove", expression])
+		commands._cmd_watch([expression])
+		var clear_result = commands._cmd_watch(["clear"])
+		var passed = remove_result == "Removed watch: %s" % expression and clear_result == "Cleared 1 watch(es)"
+		core.clear_watches()
+		_cleanup_watch_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Watch Invalid Expression", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_watch(["not_a_valid_expression"])
+		return result == "Error: Watch expression must use Engine.<property> or <node_path>:<property>"
+	)
+
+	test("Built-in Commands - Watch Engine Property", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if not core:
+			return false
+		core.clear_watches()
+		var original_time_scale := Engine.time_scale
+		var add_result = commands._cmd_watch(["Engine.time_scale"])
+		Engine.time_scale = 0.5
+		var poll_result = commands._cmd_watch(["poll"])
+		Engine.time_scale = original_time_scale
+		core.clear_watches()
+		return add_result.contains("Watching Engine.time_scale = ") and poll_result.contains("WATCH Engine.time_scale = 0.5")
 	)
 	
 	if Engine.is_editor_hint():
@@ -928,6 +1043,25 @@ func run_integration_tests():
 		return passed
 	)
 
+	test("Integration - Watch Command Execution", func():
+		var commands = BuiltInCommands.new()
+		commands.register_editor_commands()
+		var core := _debug_core()
+		if not core:
+			return false
+		core.clear_watches()
+		var fixture = _create_watch_fixture()
+		var expression = "%s:process_mode" % fixture.target.get_path()
+		var add_result = registry.execute_command("watch %s" % expression)
+		fixture.target.process_mode = Node.PROCESS_MODE_DISABLED
+		var poll_result = registry.execute_command("watch poll")
+		var list_result = registry.execute_command("watch")
+		var passed = add_result.contains("Watching %s = " % expression) and poll_result.contains(expression) and list_result.contains(expression)
+		core.clear_watches()
+		_cleanup_watch_fixture(fixture)
+		return passed
+	)
+
 func run_performance_tests():
 	print("\nTesting Performance...")
 	var registry := _registry()
@@ -1253,6 +1387,38 @@ func _cleanup_scene_tree_fixture(fixture: Dictionary) -> void:
 	if parent:
 		parent.remove_child(scene_root)
 	scene_root.free()
+
+func _create_watch_fixture() -> Dictionary:
+	var unique_id := str(Time.get_ticks_usec())
+	var watch_root := Node.new()
+	watch_root.name = "WatchFixture_%s_Root" % unique_id
+
+	var target := Node.new()
+	target.name = "WatchFixture_%s_Target" % unique_id
+	target.process_mode = Node.PROCESS_MODE_INHERIT
+	watch_root.add_child(target)
+
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree:
+		tree.root.add_child(watch_root)
+
+	return {
+		"root": watch_root,
+		"target": target,
+	}
+
+func _cleanup_watch_fixture(fixture: Dictionary) -> void:
+	if not fixture.has("root"):
+		return
+
+	var watch_root = fixture.root as Node
+	if not watch_root:
+		return
+
+	var parent := watch_root.get_parent()
+	if parent:
+		parent.remove_child(watch_root)
+	watch_root.free()
 
 func create_test_file(filename: String, content: String = "") -> bool:
 	var file = FileAccess.open("res://" + filename, FileAccess.WRITE)
