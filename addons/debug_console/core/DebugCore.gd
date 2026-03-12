@@ -174,6 +174,150 @@ func _collect_properties(target: Object) -> Array[Dictionary]:
 			"value": _format_watch_value(raw_value) if raw_value != null else "<null>",
 		})
 	return result
+
+func get_live_property(selector: String) -> Dictionary:
+	var parsed := _split_target_selector(selector)
+	if not bool(parsed.get("ok", false)):
+		return parsed
+
+	var target = parsed.get("target")
+	var property_path := str(parsed.get("property_path", ""))
+	if target == null:
+		return {"ok": false, "result": "Error: Target not found"}
+
+	if not _property_exists(target, property_path):
+		return {"ok": false, "result": "Error: Property not found: %s" % property_path}
+
+	var current_value = _resolve_property_path(target, property_path)
+	return {
+		"ok": true,
+		"selector": str(parsed.get("selector", selector)).strip_edges(),
+		"value": _format_watch_value(current_value),
+	}
+
+func set_live_property(selector: String, raw_value: String) -> Dictionary:
+	var parsed := _split_target_selector(selector)
+	if not bool(parsed.get("ok", false)):
+		return parsed
+
+	var target = parsed.get("target")
+	var property_path := str(parsed.get("property_path", ""))
+	if target == null:
+		return {"ok": false, "result": "Error: Target not found"}
+
+	if not _property_exists(target, property_path):
+		return {"ok": false, "result": "Error: Property not found: %s" % property_path}
+
+	var old_value = _resolve_property_path(target, property_path)
+	var converted_value_result := _convert_string_to_type(raw_value.strip_edges(), old_value)
+	if not bool(converted_value_result.get("ok", false)):
+		return converted_value_result
+
+	var converted_value = converted_value_result.get("value")
+	if not _set_property_path(target, property_path, converted_value):
+		return {"ok": false, "result": "Error: Failed to set property: %s" % property_path}
+
+	var new_value = _resolve_property_path(target, property_path)
+	return {
+		"ok": true,
+		"selector": str(parsed.get("selector", selector)).strip_edges(),
+		"old_value": _format_watch_value(old_value),
+		"new_value": _format_watch_value(new_value),
+	}
+
+func _split_target_selector(selector: String) -> Dictionary:
+	var normalized := selector.strip_edges()
+	if normalized.is_empty():
+		return {
+			"ok": false,
+			"result": "Usage: <target>.<property_path>"
+		}
+
+	var dot_index := normalized.find(".")
+	if dot_index == -1:
+		return {
+			"ok": false,
+			"result": "Usage: <target>.<property_path>"
+		}
+
+	var target_selector := normalized.substr(0, dot_index).strip_edges()
+	var property_path := normalized.substr(dot_index + 1).strip_edges()
+	if target_selector.is_empty() or property_path.is_empty():
+		return {
+			"ok": false,
+			"result": "Usage: <target>.<property_path>"
+		}
+
+	return {
+		"ok": true,
+		"selector": normalized,
+		"target": _resolve_inspect_target(target_selector),
+		"property_path": property_path,
+	}
+
+func _set_property_path(target, property_path: String, value) -> bool:
+	var segments := property_path.split(".", false)
+	if segments.is_empty():
+		return false
+
+	var current = target
+	for index in range(segments.size() - 1):
+		var segment := segments[index]
+		if current == null:
+			return false
+		if current is Dictionary:
+			if not current.has(segment):
+				return false
+			current = current[segment]
+		elif current is Object:
+			current = current.get(segment)
+		else:
+			return false
+
+	var leaf_segment := segments[segments.size() - 1]
+	if current is Dictionary:
+		current[leaf_segment] = value
+		return true
+	if current is Object:
+		current.set(leaf_segment, value)
+		return true
+	return false
+
+func _convert_string_to_type(raw_value: String, existing_value) -> Dictionary:
+	if existing_value is bool:
+		var lower := raw_value.to_lower()
+		if lower in ["1", "true", "on", "yes"]:
+			return {"ok": true, "value": true}
+		if lower in ["0", "false", "off", "no"]:
+			return {"ok": true, "value": false}
+		return {"ok": false, "result": "Error: Invalid bool value: %s" % raw_value}
+
+	if existing_value is int:
+		if not raw_value.is_valid_int():
+			return {"ok": false, "result": "Error: Invalid int value: %s" % raw_value}
+		return {"ok": true, "value": int(raw_value)}
+
+	if existing_value is float:
+		if not raw_value.is_valid_float():
+			return {"ok": false, "result": "Error: Invalid float value: %s" % raw_value}
+		return {"ok": true, "value": float(raw_value)}
+
+	if existing_value is StringName:
+		return {"ok": true, "value": StringName(raw_value)}
+
+	if existing_value is NodePath:
+		return {"ok": true, "value": NodePath(raw_value)}
+
+	if existing_value is String:
+		return {"ok": true, "value": raw_value}
+
+	if raw_value == "null":
+		return {"ok": true, "value": null}
+
+	var parsed_value = str_to_var(raw_value)
+	if parsed_value == null and raw_value != "null":
+		return {"ok": false, "result": "Error: Unsupported value format: %s" % raw_value}
+	return {"ok": true, "value": parsed_value}
 #endregion
 
 func add_watch(expression: String) -> Dictionary:

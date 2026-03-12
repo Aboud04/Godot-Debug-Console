@@ -88,6 +88,8 @@ func register_universal_commands():
 	_registry.register_command("watch", _cmd_watch, "Monitor Engine or node properties", "both")
 	_registry.register_command("save_log", _save_log, "Export the current session log to a file", "both")
 	_registry.register_command("inspect", _cmd_inspect, "Dump all properties of a node, autoload, or Engine", "both")
+	_registry.register_command("get", _cmd_get, "Read a live property by selector: <target>.<property>", "both")
+	_registry.register_command("set", _cmd_set, "Set a live property value: <target>.<property> <value>", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -226,6 +228,45 @@ func _inspect_type_name(type_id: int) -> String:
 		TYPE_TRANSFORM3D: return "Xform3D"
 		TYPE_BASIS: return "Basis"
 		_: return "Variant"
+
+func _cmd_get(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: get <target>.<property_path>"
+
+	var selector := " ".join(args).strip_edges()
+	var result: Dictionary = _core.get_live_property(selector)
+	if not bool(result.get("ok", false)):
+		return str(result.get("result", "Error: get failed"))
+
+	return "%s = %s" % [
+		str(result.get("selector", selector)),
+		str(result.get("value", "<null>"))
+	]
+
+func _cmd_set(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.size() < 2:
+		return "Usage: set <target>.<property_path> <value>"
+
+	var selector := str(args[0]).strip_edges()
+	var raw_value := " ".join(args.slice(1)).strip_edges()
+	if raw_value.is_empty():
+		return "Usage: set <target>.<property_path> <value>"
+
+	var result: Dictionary = _core.set_live_property(selector, raw_value)
+	if not bool(result.get("ok", false)):
+		return str(result.get("result", "Error: set failed"))
+
+	return "Set %s: %s -> %s" % [
+		str(result.get("selector", selector)),
+		str(result.get("old_value", "<null>")),
+		str(result.get("new_value", "<null>"))
+	]
 #endregion
 
 #region Editor commands

@@ -410,6 +410,80 @@ func run_builtin_commands_tests():
 		# max_history_size is a declared @export-style var in DebugCore
 		return result.contains("max_history_size")
 	)
+
+	# --- get/set tests ---
+	test("Built-in Commands - Get Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("get")
+	)
+
+	test("Built-in Commands - Set Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("set")
+	)
+
+	test("Built-in Commands - Get Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_get([])
+		return result == "Usage: get <target>.<property_path>"
+	)
+
+	test("Built-in Commands - Set Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_set(["DebugCore.max_history_size"])
+		return result == "Usage: set <target>.<property_path> <value>"
+	)
+
+	test("Built-in Commands - Get DebugCore Property", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_get(["DebugCore.max_history_size"])
+		return result.begins_with("DebugCore.max_history_size = ")
+	)
+
+	test("Built-in Commands - Set DebugCore Int Property", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var original_value = core.max_history_size
+		var set_result = commands._cmd_set(["DebugCore.max_history_size", "1234"])
+		var get_result = commands._cmd_get(["DebugCore.max_history_size"])
+		core.max_history_size = original_value
+		return set_result.contains("Set DebugCore.max_history_size") and get_result.contains("1234")
+	)
+
+	test("Built-in Commands - Set Engine Float Property", func():
+		var commands = BuiltInCommands.new()
+		var original_value = Engine.time_scale
+		var set_result = commands._cmd_set(["Engine.time_scale", "0.75"])
+		var get_result = commands._cmd_get(["Engine.time_scale"])
+		Engine.time_scale = original_value
+		return set_result.contains("Set Engine.time_scale") and get_result.contains("0.75")
+	)
+
+	test("Built-in Commands - Set Invalid Type Rejected", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_set(["DebugCore.max_history_size", "not_an_int"])
+		return result.begins_with("Error: Invalid int value:")
+	)
+
+	test("Built-in Commands - Get Invalid Selector", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_get(["DebugCore"])
+		return result == "Usage: <target>.<property_path>"
+	)
+
+	test("Built-in Commands - Set Unknown Target", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_set(["MissingTarget.value", "1"])
+		return result == "Error: Target not found"
+	)
+	# --- end get/set tests ---
 	# --- end inspect tests ---
 	
 	if Engine.is_editor_hint():
