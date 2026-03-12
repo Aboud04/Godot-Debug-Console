@@ -1,7 +1,6 @@
 # Godot-specific ignores
-.godot/*
-!.godot/global_script_class_cache.cfg
-.import/
+.godot/
+*.import
 export.cfg
 export_presets.cfg
 

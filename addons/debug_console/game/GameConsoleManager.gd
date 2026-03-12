@@ -36,9 +36,17 @@ func _create_console():
 	
 	console_instance.visible = false
 	
-	DebugCore.initialize_for_game(console_instance)
-	
-	builtin_commands = preload("res://addons/debug_console/core/BuiltInCommands.gd").new()
+	# DebugCore and CommandRegistry are already in the scene tree (registered by
+	# plugin.gd before this autoload was registered). Fetch via node path rather
+	# than bare global identifiers to stay consistent with the DI pattern and to
+	# be safe in case load order ever shifts.
+	var debug_core: Node = get_node("/root/DebugCore")
+	var command_registry: Node = get_node("/root/CommandRegistry")
+
+	debug_core.initialize_for_game(console_instance)
+
+	builtin_commands = load("res://addons/debug_console/core/BuiltInCommands.gd").new()
+	builtin_commands.initialize(command_registry, debug_core)
 	builtin_commands.register_game_commands()
 
 func _input(event):

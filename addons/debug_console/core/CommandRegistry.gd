@@ -15,12 +15,10 @@ func register_command(name: String, callable: Callable, description: String = ""
 		"context": context,  # "editor", "game", or "both"
 		"supports_input": supports_input
 	}
-	DebugCore.Log("Command registered: %s (%s)" % [name, context])
 
 func unregister_command(name: String):
 	if _commands.has(name):
 		_commands.erase(name)
-		DebugCore.Log("Command unregistered: " + name)
 
 func execute_command(input: String) -> String:
 	if input.contains("|"):

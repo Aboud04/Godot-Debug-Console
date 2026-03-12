@@ -2,6 +2,8 @@
 extends RefCounted
 class_name TestFramework
 
+const LOG_LEVEL_INFO := 0
+
 signal test_completed(test_name: String, passed: bool, message: String)
 
 var total_tests: int = 0
@@ -12,6 +14,12 @@ var test_start_time: int = 0
 var test_scene_instance: Node = null
 var game_console_instance: GameConsole = null
 var editor_console_instance: EditorConsole = null
+
+func _registry() -> Node:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return null
+	return tree.root.get_node_or_null("/root/CommandRegistry")
 
 func run_all_tests():
 	test_start_time = Time.get_ticks_msec()
@@ -50,41 +58,42 @@ func reset_test_counters():
 
 func run_command_registry_tests():
 	print("\nTesting Command Registry...")
+	var registry := _registry()
 	
 	test("Command Registry - Register Command", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("test_reg", test_callable, "Test command", "both")
-		var success = CommandRegistry._commands.has("test_reg")
-		CommandRegistry.unregister_command("test_reg")
+		registry.register_command("test_reg", test_callable, "Test command", "both")
+		var success = registry._commands.has("test_reg")
+		registry.unregister_command("test_reg")
 		return success
 	)
 	
 	test("Command Registry - Execute Command", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("test_exec", test_callable, "Test command", "both")
-		var result = CommandRegistry.execute_command("test_exec arg1 arg2")
-		CommandRegistry.unregister_command("test_exec")
+		registry.register_command("test_exec", test_callable, "Test command", "both")
+		var result = registry.execute_command("test_exec arg1 arg2")
+		registry.unregister_command("test_exec")
 		return result == "test_function called with: arg1,arg2"
 	)
 	
 	test("Command Registry - Get Help", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("test_help", test_callable, "Test command", "both")
-		var help = CommandRegistry.get_command_help("test_help")
-		CommandRegistry.unregister_command("test_help")
+		registry.register_command("test_help", test_callable, "Test command", "both")
+		var help = registry.get_command_help("test_help")
+		registry.unregister_command("test_help")
 		return help == "test_help - Test command"
 	)
 	
 	test("Command Registry - Unknown Command", func():
-		var result = CommandRegistry.execute_command("unknown_command")
+		var result = registry.execute_command("unknown_command")
 		return result.contains("Unknown command")
 	)
 	
 	test("Command Registry - Context Validation", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("editor_only", test_callable, "Editor only", "editor")
-		var result = CommandRegistry.execute_command("editor_only")
-		CommandRegistry.unregister_command("editor_only")
+		registry.register_command("editor_only", test_callable, "Editor only", "editor")
+		var result = registry.execute_command("editor_only")
+		registry.unregister_command("editor_only")
 		# In editor mode, this should work. In game mode, it should fail.
 		if Engine.is_editor_hint():
 			return not result.contains("not available")
@@ -93,40 +102,41 @@ func run_command_registry_tests():
 	)
 	
 	test("Command Registry - Existing Commands Intact", func():
-		var result = CommandRegistry.execute_command("help")
+		var result = registry.execute_command("help")
 		return result.contains("Available commands")
 	)
 	
 	test("Command Registry - Unregister Command", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("test_unreg", test_callable, "Test command", "both")
-		CommandRegistry.unregister_command("test_unreg")
-		return not CommandRegistry._commands.has("test_unreg")
+		registry.register_command("test_unreg", test_callable, "Test command", "both")
+		registry.unregister_command("test_unreg")
+		return not registry._commands.has("test_unreg")
 	)
 	
 	test("Command Registry - Get Available Commands", func():
-		var commands = CommandRegistry.get_available_commands()
+		var commands = registry.get_available_commands()
 		return commands.size() > 0 and commands.has("help")
 	)
 	
 	test("Command Registry - Command with Input Support", func():
 		var test_callable = Callable(self, "_test_function_with_input")
-		CommandRegistry.register_command("test_input", test_callable, "Test command", "both", true)
-		var result = CommandRegistry.execute_command("echo hello | test_input")
-		CommandRegistry.unregister_command("test_input")
+		registry.register_command("test_input", test_callable, "Test command", "both", true)
+		var result = registry.execute_command("echo hello | test_input")
+		registry.unregister_command("test_input")
 		return result.contains("hello")
 	)
 	
 	test("Command Registry - Command without Input Support", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("test_no_input", test_callable, "Test command", "both", false)
-		var result = CommandRegistry.execute_command("echo hello | test_no_input")
-		CommandRegistry.unregister_command("test_no_input")
+		registry.register_command("test_no_input", test_callable, "Test command", "both", false)
+		var result = registry.execute_command("echo hello | test_no_input")
+		registry.unregister_command("test_no_input")
 		return result.contains("test_function called with: hello")
 	)
 
 func run_builtin_commands_tests():
 	print("\nTesting Built-in Commands...")
+	var registry := _registry()
 	
 	test("Built-in Commands - Help Command", func():
 		var commands = BuiltInCommands.new()
@@ -144,6 +154,62 @@ func run_builtin_commands_tests():
 		var commands = BuiltInCommands.new()
 		var result = commands._echo([], "piped input", true)
 		return result == "piped input"
+	)
+
+	test("Built-in Commands - Scene Tree Registration", func():
+		if not registry:
+			return false
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var commands = BuiltInCommands.new()
+		commands.initialize(registry, tree.root.get_node_or_null("/root/DebugCore"))
+		commands.register_universal_commands()
+		return registry._commands.has("scene_tree")
+	)
+
+	test("Built-in Commands - Scene Tree Full Output", func():
+		var fixture = _create_scene_tree_fixture()
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_scene_tree([fixture.root.get_path()])
+		var passed = (
+			result.contains("[Node] " + fixture.root.name)
+			and result.contains("├─ [Node] " + fixture.branch_a.name)
+			and result.contains("│  └─ [Node] " + fixture.leaf_a.name)
+			and result.contains("└─ [Node] " + fixture.branch_b.name)
+			and result.contains("   └─ [Node] " + fixture.leaf_b.name)
+		)
+		_cleanup_scene_tree_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Scene Tree Subtree Output", func():
+		var fixture = _create_scene_tree_fixture()
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_scene_tree([fixture.branch_b.get_path()])
+		var passed = (
+			result.contains("[Node] " + fixture.branch_b.name)
+			and result.contains("└─ [Node] " + fixture.leaf_b.name)
+			and not result.contains(fixture.branch_a.name)
+			and not result.contains(fixture.leaf_a.name)
+		)
+		_cleanup_scene_tree_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Scene Tree Named Lookup", func():
+		var fixture = _create_scene_tree_fixture()
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_scene_tree([fixture.root.name])
+		var passed = result.contains("[Node] " + fixture.root.name) and result.contains(fixture.branch_a.name)
+		_cleanup_scene_tree_fixture(fixture)
+		return passed
+	)
+
+	test("Built-in Commands - Scene Tree Invalid Node", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_scene_tree(["DefinitelyMissingSceneTreeNode"])
+		return result == "Error: Node not found: DefinitelyMissingSceneTreeNode"
 	)
 	
 	if Engine.is_editor_hint():
@@ -396,9 +462,10 @@ func run_builtin_commands_tests():
 
 func run_autocomplete_tests():
 	print("\nTesting Autocomplete...")
+	var registry := _registry()
 	
 	test("Autocomplete - Command Suggestions", func():
-		var available = CommandRegistry.get_available_commands()
+		var available = registry.get_available_commands()
 		var matching = []
 		for cmd in available:
 			if cmd.begins_with("h"):
@@ -708,21 +775,22 @@ func run_file_operation_tests():
 
 func run_piping_tests():
 	print("\nTesting Command Piping...")
+	var registry := _registry()
 	
 	test("Piping - Simple Echo Pipe", func():
-		var result = CommandRegistry.execute_command("echo hello world | echo")
+		var result = registry.execute_command("echo hello world | echo")
 		return result == "hello world"
 	)
 	
 	test("Piping - LS to Grep", func():
 		if not Engine.is_editor_hint():
 			return true
-		var result = CommandRegistry.execute_command("ls | grep .gd")
+		var result = registry.execute_command("ls | grep .gd")
 		return result.contains(".gd") or result == "No matches found"
 	)
 	
 	test("Piping - Multiple Pipes", func():
-		var result = CommandRegistry.execute_command("ls | grep .gd | head 5")
+		var result = registry.execute_command("ls | grep .gd | head 5")
 		return not result.contains("Error") and not result.contains("Usage")
 	)
 	
@@ -733,7 +801,7 @@ func run_piping_tests():
 		var test_content = "func test_function():\n    print('hello')\nfunc another_function():\n    pass"
 		create_test_file("test_pipe_file.gd", test_content)
 		
-		var result = CommandRegistry.execute_command("cat test_pipe_file.gd | grep func")
+		var result = registry.execute_command("cat test_pipe_file.gd | grep func")
 		
 		# Cleanup
 		cleanup_test_file("test_pipe_file.gd")
@@ -742,20 +810,20 @@ func run_piping_tests():
 	)
 	
 	test("Piping - Head and Tail", func():
-		var result = CommandRegistry.execute_command("ls | head 3 | tail 2")
+		var result = registry.execute_command("ls | head 3 | tail 2")
 		return not result.contains("Error") and not result.contains("Usage")
 	)
 	
 	test("Piping - Find to Grep", func():
 		if not Engine.is_editor_hint():
 			return true
-		var result = CommandRegistry.execute_command("find .gd | grep test")
+		var result = registry.execute_command("find .gd | grep test")
 		return not result.contains("Error") and not result.contains("Usage")
 	)
 	
 	test("Piping - Command with No Input Support", func():
 		
-		var result = CommandRegistry.execute_command("echo nonexistent_command | help")
+		var result = registry.execute_command("echo nonexistent_command | help")
 		# This should become "help nonexistent_command" which returns "Unknown command: nonexistent_command"
 		return result.contains("Unknown command: nonexistent_command")
 	)
@@ -764,39 +832,40 @@ func run_piping_tests():
 		if not Engine.is_editor_hint():
 			return true
 		
-		var result = CommandRegistry.execute_command("echo hello world | grep hello")
+		var result = registry.execute_command("echo hello world | grep hello")
 		# This should search for "hello" in the input "hello world"
 		return result.contains("hello world")
 	)
 	
 	test("Piping - Empty Pipe Chain", func():
-		var result = CommandRegistry.execute_command("echo hello | | echo world")
+		var result = registry.execute_command("echo hello | | echo world")
 		return result == "hello"
 	)
 	
 	test("Piping - Whitespace Handling", func():
-		var result = CommandRegistry.execute_command(" echo hello | echo ")
+		var result = registry.execute_command(" echo hello | echo ")
 		return result == "hello"
 	)
 	
 	test("Piping - Unknown Command in Chain", func():
-		var result = CommandRegistry.execute_command("echo hello | unknown_command")
+		var result = registry.execute_command("echo hello | unknown_command")
 		return result.contains("Unknown command")
 	)
 
 func run_integration_tests():
 	print("\nTesting Integration...")
+	var registry := _registry()
 	
 	test("Integration - Command Execution Flow", func():
 		var commands = BuiltInCommands.new()
 		commands.register_editor_commands()
 		
-		var result = CommandRegistry.execute_command("help")
+		var result = registry.execute_command("help")
 		return result.contains("Available commands")
 	)
 	
 	test("Integration - Autocomplete Integration", func():
-		var available = CommandRegistry.get_available_commands()
+		var available = registry.get_available_commands()
 		var matching = []
 		for cmd in available:
 			if cmd.begins_with("h"):
@@ -807,14 +876,14 @@ func run_integration_tests():
 	test("Integration - Command Registration Flow", func():
 		var commands = BuiltInCommands.new()
 		commands.register_editor_commands()
-		var available = CommandRegistry.get_available_commands()
+		var available = registry.get_available_commands()
 		return available.size() > 0 and available.has("help")
 	)
 	
 	test("Integration - Command Arguments", func():
 		var commands = BuiltInCommands.new()
 		commands.register_editor_commands()
-		var result = CommandRegistry.execute_command("help")
+		var result = registry.execute_command("help")
 		return result.contains("Available commands") and result.contains("help")
 	)
 	
@@ -828,14 +897,14 @@ func run_integration_tests():
 		var result3 = ""
 		
 		if Engine.is_editor_hint():
-			result1 = CommandRegistry.execute_command("ls | grep .gd | head 3")
-			result2 = CommandRegistry.execute_command("echo 'test content' | grep test")
-			result3 = CommandRegistry.execute_command("help | grep help")
+			result1 = registry.execute_command("ls | grep .gd | head 3")
+			result2 = registry.execute_command("echo 'test content' | grep test")
+			result3 = registry.execute_command("help | grep help")
 		else:
 			
-			result1 = CommandRegistry.execute_command("echo test | echo")
-			result2 = CommandRegistry.execute_command("echo 'test content' | echo")
-			result3 = CommandRegistry.execute_command("help")
+			result1 = registry.execute_command("echo test | echo")
+			result2 = registry.execute_command("echo 'test content' | echo")
+			result3 = registry.execute_command("help")
 		
 		
 		var success1 = not result1.contains("Error") or result1.is_empty() or result1.contains("test")
@@ -850,44 +919,55 @@ func run_integration_tests():
 		commands.register_editor_commands()
 		
 		
-		var available_commands = CommandRegistry.get_available_commands()
+		var available_commands = registry.get_available_commands()
 		
 		return available_commands.size() > 0 and available_commands.has("help")
 	)
 
+	test("Integration - Scene Tree Command Execution", func():
+		var commands = BuiltInCommands.new()
+		commands.register_editor_commands()
+		var fixture = _create_scene_tree_fixture()
+		var result = registry.execute_command("scene_tree %s" % fixture.root.get_path())
+		var passed = result.contains("[Node] " + fixture.root.name) and result.contains(fixture.branch_b.name)
+		_cleanup_scene_tree_fixture(fixture)
+		return passed
+	)
+
 func run_performance_tests():
 	print("\nTesting Performance...")
+	var registry := _registry()
 	
 	test("Performance - Command Registration Speed", func():
 		var start_time = Time.get_ticks_msec()
 		
 		for i in range(50):  # Reduced from 100 to 50
 			var test_callable = Callable(self, "_test_function")
-			CommandRegistry.register_command("perf_test_" + str(i), test_callable, "Test command", "both")
+			registry.register_command("perf_test_" + str(i), test_callable, "Test command", "both")
 		
 		var end_time = Time.get_ticks_msec()
 		var duration = end_time - start_time
 		
 		# Cleanup
 		for i in range(50):  # Reduced from 100 to 50
-			CommandRegistry.unregister_command("perf_test_" + str(i))
+			registry.unregister_command("perf_test_" + str(i))
 		
 		return duration < 5000  # Increased threshold to 5 seconds
 	)
 	
 	test("Performance - Command Execution Speed", func():
 		var test_callable = Callable(self, "_test_function")
-		CommandRegistry.register_command("perf_exec", test_callable, "Test command", "both")
+		registry.register_command("perf_exec", test_callable, "Test command", "both")
 		
 		var start_time = Time.get_ticks_msec()
 		
 		for i in range(100):
-			CommandRegistry.execute_command("perf_exec arg" + str(i))
+			registry.execute_command("perf_exec arg" + str(i))
 		
 		var end_time = Time.get_ticks_msec()
 		var duration = end_time - start_time
 		
-		CommandRegistry.unregister_command("perf_exec")
+		registry.unregister_command("perf_exec")
 		
 		return duration < 1000  # Should complete in under 1 second
 	)
@@ -896,7 +976,7 @@ func run_performance_tests():
 		var start_time = Time.get_ticks_msec()
 		
 		for i in range(50):
-			CommandRegistry.execute_command("echo test" + str(i) + " | echo")
+			registry.execute_command("echo test" + str(i) + " | echo")
 		
 		var end_time = Time.get_ticks_msec()
 		var duration = end_time - start_time
@@ -932,7 +1012,7 @@ func run_performance_tests():
 		var start_time = Time.get_ticks_msec()
 		
 		for i in range(100):
-			editor_console_instance.add_log_message("Performance test message " + str(i), DebugCore.LogLevel.INFO)
+			editor_console_instance.add_log_message("Performance test message " + str(i), LOG_LEVEL_INFO)
 		
 		var end_time = Time.get_ticks_msec()
 		var duration = end_time - start_time
@@ -944,14 +1024,15 @@ func run_performance_tests():
 
 func run_error_handling_tests():
 	print("\nTesting Error Handling...")
+	var registry := _registry()
 	
 	test("Error Handling - Invalid Command Execution", func():
-		var result = CommandRegistry.execute_command("")
+		var result = registry.execute_command("")
 		return result.is_empty()
 	)
 	
 	test("Error Handling - Malformed Piping", func():
-		var result = CommandRegistry.execute_command("| | |")
+		var result = registry.execute_command("| | |")
 		return not result.contains("Error") or result.is_empty()
 	)
 	
@@ -996,13 +1077,13 @@ func run_error_handling_tests():
 		# Register many commands then unregister them
 		for i in range(50):
 			var test_callable = Callable(self, "_test_function")
-			CommandRegistry.register_command("cleanup_test_" + str(i), test_callable, "Test command", "both")
+			registry.register_command("cleanup_test_" + str(i), test_callable, "Test command", "both")
 		
 		for i in range(50):
-			CommandRegistry.unregister_command("cleanup_test_" + str(i))
+			registry.unregister_command("cleanup_test_" + str(i))
 		
 		# Verify cleanup
-		var available_commands = CommandRegistry.get_available_commands()
+		var available_commands = registry.get_available_commands()
 		var has_cleanup_commands = false
 		for cmd in available_commands:
 			if cmd.begins_with("cleanup_test_"):
@@ -1132,6 +1213,52 @@ func _test_function_with_input(args: Array, input: String = "", is_pipe_context:
 	if is_pipe_context and not input.is_empty():
 		return input
 	return "test_function_with_input called with: " + ",".join(args) + " and input: " + input
+
+func _create_scene_tree_fixture() -> Dictionary:
+	var unique_id := str(Time.get_ticks_usec())
+	var scene_root := Node.new()
+	scene_root.name = "SceneTreeFixture_%s_Root" % unique_id
+
+	var branch_a := Node.new()
+	branch_a.name = "SceneTreeFixture_%s_BranchA" % unique_id
+	scene_root.add_child(branch_a)
+
+	var leaf_a := Node.new()
+	leaf_a.name = "SceneTreeFixture_%s_LeafA" % unique_id
+	branch_a.add_child(leaf_a)
+
+	var branch_b := Node.new()
+	branch_b.name = "SceneTreeFixture_%s_BranchB" % unique_id
+	scene_root.add_child(branch_b)
+
+	var leaf_b := Node.new()
+	leaf_b.name = "SceneTreeFixture_%s_LeafB" % unique_id
+	branch_b.add_child(leaf_b)
+
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree:
+		tree.root.add_child(scene_root)
+
+	return {
+		"root": scene_root,
+		"branch_a": branch_a,
+		"leaf_a": leaf_a,
+		"branch_b": branch_b,
+		"leaf_b": leaf_b,
+	}
+
+func _cleanup_scene_tree_fixture(fixture: Dictionary) -> void:
+	if not fixture.has("root"):
+		return
+
+	var scene_root = fixture.root as Node
+	if not scene_root:
+		return
+
+	var parent := scene_root.get_parent()
+	if parent:
+		parent.remove_child(scene_root)
+	scene_root.free()
 
 func create_test_file(filename: String, content: String = "") -> bool:
 	var file = FileAccess.open("res://" + filename, FileAccess.WRITE)
