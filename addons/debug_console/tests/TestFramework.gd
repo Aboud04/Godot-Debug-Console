@@ -159,12 +159,6 @@ func run_builtin_commands_tests():
 	test("Built-in Commands - Scene Tree Registration", func():
 		if not registry:
 			return false
-		var tree := Engine.get_main_loop() as SceneTree
-		if not tree:
-			return false
-		var commands = BuiltInCommands.new()
-		commands.initialize(registry, tree.root.get_node_or_null("/root/DebugCore"))
-		commands.register_universal_commands()
 		return registry._commands.has("scene_tree")
 	)
 

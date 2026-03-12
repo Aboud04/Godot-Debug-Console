@@ -70,8 +70,9 @@ func _execute_command(command: String):
 		return
 
 	var result = registry.execute_command(command)
-	if not result.is_empty():
-		add_log_message(result, LOG_LEVEL_INFO)
+	var result_text = "" if result == null else str(result)
+	if not result_text.is_empty():
+		add_log_message(result_text, LOG_LEVEL_INFO)
 	
 	input_line.clear()
 	
