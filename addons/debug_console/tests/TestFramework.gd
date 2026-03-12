@@ -532,6 +532,38 @@ func run_builtin_commands_tests():
 		return run_result == "reload_ok"
 	)
 	# --- end alias/unalias tests ---
+
+	# --- benchmark tests ---
+	test("Built-in Commands - Benchmark Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("benchmark")
+	)
+
+	test("Built-in Commands - Benchmark Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark([])
+		return result == "Usage: benchmark [iterations] <command>"
+	)
+
+	test("Built-in Commands - Benchmark Invalid Iterations", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark(["0", "echo", "ok"])
+		return result == "Error: iterations must be > 0"
+	)
+
+	test("Built-in Commands - Benchmark Echo Command", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark(["3", "echo", "bench_ok"])
+		return result.contains("Benchmark 'echo bench_ok' iterations=3") and result.contains("avg=") and result.contains("min=") and result.contains("max=") and result.contains("Last result: bench_ok")
+	)
+
+	test("Built-in Commands - Benchmark Recursive Guard", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_benchmark(["benchmark", "echo", "nope"])
+		return result == "Error: benchmark cannot run benchmark recursively"
+	)
+	# --- end benchmark tests ---
 	# --- end get/set tests ---
 	# --- end inspect tests ---
 	

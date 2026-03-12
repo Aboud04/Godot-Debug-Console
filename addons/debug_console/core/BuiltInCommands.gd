@@ -97,6 +97,7 @@ func register_universal_commands():
 	_registry.register_command("set", _cmd_set, "Set a live property value: <target>.<property> <value>", "both")
 	_registry.register_command("alias", _cmd_alias, "Create/list persistent aliases", "both")
 	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
+	_registry.register_command("benchmark", _cmd_benchmark, "Benchmark a command: benchmark [iterations] <command>", "both")
 	_load_aliases_from_config()
 	_register_alias_commands()
 
@@ -348,9 +349,60 @@ func _execute_alias(args: Array, alias_name: String) -> String:
 	var expansion := str(_aliases.get(alias_name, ""))
 	var suffix := " ".join(args).strip_edges()
 	var full_command := expansion if suffix.is_empty() else "%s %s" % [expansion, suffix]
-	var result := _registry.execute_command(full_command)
+	var result: String = _registry.execute_command(full_command)
 	_active_alias_calls.erase(alias_name)
 	return result
+
+func _cmd_benchmark(args: Array) -> String:
+	_ensure_dependencies()
+	if not _registry:
+		return "Error: CommandRegistry is unavailable"
+	if args.is_empty():
+		return "Usage: benchmark [iterations] <command>"
+
+	var iterations := 10
+	var command_parts := args.duplicate()
+	if not command_parts.is_empty() and str(command_parts[0]).is_valid_int():
+		iterations = int(str(command_parts[0]))
+		command_parts = command_parts.slice(1)
+
+	if iterations <= 0:
+		return "Error: iterations must be > 0"
+	if command_parts.is_empty():
+		return "Usage: benchmark [iterations] <command>"
+
+	var command_to_run := " ".join(command_parts).strip_edges()
+	if command_to_run.begins_with("\"") and command_to_run.ends_with("\"") and command_to_run.length() >= 2:
+		command_to_run = command_to_run.substr(1, command_to_run.length() - 2)
+	if command_to_run.is_empty():
+		return "Usage: benchmark [iterations] <command>"
+	if command_to_run.begins_with("benchmark"):
+		return "Error: benchmark cannot run benchmark recursively"
+
+	var min_us := 9223372036854775807
+	var max_us := 0
+	var total_us := 0
+	var last_result := ""
+
+	for i in range(iterations):
+		var started := Time.get_ticks_usec()
+		last_result = _registry.execute_command(command_to_run)
+		var elapsed := Time.get_ticks_usec() - started
+		if elapsed < min_us:
+			min_us = elapsed
+		if elapsed > max_us:
+			max_us = elapsed
+		total_us += elapsed
+
+	var avg_us := int(total_us / iterations)
+	return "Benchmark '%s' iterations=%d avg=%.3fms min=%.3fms max=%.3fms%s" % [
+		command_to_run,
+		iterations,
+		float(avg_us) / 1000.0,
+		float(min_us) / 1000.0,
+		float(max_us) / 1000.0,
+		("\nLast result: %s" % last_result) if not last_result.is_empty() else ""
+	]
 
 func _register_alias_commands() -> void:
 	if not _registry:
