@@ -4,6 +4,11 @@ class_name BuiltInCommands extends RefCounted
 #region BuiltInCommands
 var _registry: Node
 var _core: Node
+var _aliases: Dictionary = {}
+var _registered_alias_names: Array[String] = []
+var _active_alias_calls: Array[String] = []
+
+const ALIAS_CONFIG_PATH := "user://debug_console_aliases.cfg"
 
 func initialize(registry: Node, core: Node) -> void:
 	_registry = registry
@@ -90,6 +95,10 @@ func register_universal_commands():
 	_registry.register_command("inspect", _cmd_inspect, "Dump all properties of a node, autoload, or Engine", "both")
 	_registry.register_command("get", _cmd_get, "Read a live property by selector: <target>.<property>", "both")
 	_registry.register_command("set", _cmd_set, "Set a live property value: <target>.<property> <value>", "both")
+	_registry.register_command("alias", _cmd_alias, "Create/list persistent aliases", "both")
+	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
+	_load_aliases_from_config()
+	_register_alias_commands()
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -267,6 +276,135 @@ func _cmd_set(args: Array) -> String:
 		str(result.get("old_value", "<null>")),
 		str(result.get("new_value", "<null>"))
 	]
+
+func _cmd_alias(args: Array) -> String:
+	_ensure_dependencies()
+	if not _registry:
+		return "Error: CommandRegistry is unavailable"
+
+	if args.is_empty():
+		if _aliases.is_empty():
+			return "No aliases configured"
+		var keys := _aliases.keys()
+		keys.sort()
+		var lines: Array[String] = ["Aliases:"]
+		for key in keys:
+			lines.append("  %s='%s'" % [str(key), str(_aliases[key])])
+		return "\n".join(lines)
+
+	if args.size() == 1:
+		var lookup := str(args[0]).to_lower()
+		if not _aliases.has(lookup):
+			return "Alias not found: %s" % lookup
+		return "%s='%s'" % [lookup, str(_aliases[lookup])]
+
+	var alias_name := str(args[0]).strip_edges().to_lower()
+	if alias_name.is_empty() or alias_name.contains(" ") or alias_name.contains("|"):
+		return "Error: Invalid alias name"
+
+	if alias_name == "alias" or alias_name == "unalias":
+		return "Error: Reserved alias name: %s" % alias_name
+
+	if _registry._commands.has(alias_name) and not _aliases.has(alias_name):
+		return "Error: Command already exists: %s" % alias_name
+
+	var expansion := " ".join(args.slice(1)).strip_edges()
+	if expansion.is_empty():
+		return "Usage: alias <name> <command>"
+
+	# Prevent direct self-recursion at definition time.
+	if expansion == alias_name or expansion.begins_with(alias_name + " "):
+		return "Error: Alias cannot reference itself"
+
+	_aliases[alias_name] = expansion
+	_register_single_alias_command(alias_name)
+	_save_aliases_to_config()
+	return "Alias set: %s='%s'" % [alias_name, expansion]
+
+func _cmd_unalias(args: Array) -> String:
+	_ensure_dependencies()
+	if args.is_empty():
+		return "Usage: unalias <name>"
+
+	var alias_name := str(args[0]).strip_edges().to_lower()
+	if not _aliases.has(alias_name):
+		return "Alias not found: %s" % alias_name
+
+	_aliases.erase(alias_name)
+	_unregister_single_alias_command(alias_name)
+	_save_aliases_to_config()
+	return "Alias removed: %s" % alias_name
+
+func _execute_alias(args: Array, alias_name: String) -> String:
+	if not _registry:
+		return "Error: CommandRegistry is unavailable"
+	if not _aliases.has(alias_name):
+		return "Error: Alias not found: %s" % alias_name
+
+	if _active_alias_calls.has(alias_name):
+		return "Error: Alias recursion detected: %s" % alias_name
+
+	_active_alias_calls.append(alias_name)
+	var expansion := str(_aliases.get(alias_name, ""))
+	var suffix := " ".join(args).strip_edges()
+	var full_command := expansion if suffix.is_empty() else "%s %s" % [expansion, suffix]
+	var result := _registry.execute_command(full_command)
+	_active_alias_calls.erase(alias_name)
+	return result
+
+func _register_alias_commands() -> void:
+	if not _registry:
+		return
+	for alias_name in _registered_alias_names:
+		_registry.unregister_command(alias_name)
+	_registered_alias_names.clear()
+
+	for alias_name_variant in _aliases.keys():
+		_register_single_alias_command(str(alias_name_variant))
+
+func _register_single_alias_command(alias_name: String) -> void:
+	if not _registry:
+		return
+	if alias_name.is_empty():
+		return
+
+	# Do not let aliases override built-in commands, except updating existing alias entries.
+	if _registry._commands.has(alias_name) and not _registered_alias_names.has(alias_name):
+		return
+
+	var callable := Callable(self, "_execute_alias").bind(alias_name)
+	_registry.register_command(alias_name, callable, "Alias for: %s" % str(_aliases.get(alias_name, "")), "both")
+	if not _registered_alias_names.has(alias_name):
+		_registered_alias_names.append(alias_name)
+
+func _unregister_single_alias_command(alias_name: String) -> void:
+	if not _registry:
+		return
+	_registry.unregister_command(alias_name)
+	_registered_alias_names.erase(alias_name)
+
+func _load_aliases_from_config() -> void:
+	_aliases.clear()
+	var config := ConfigFile.new()
+	var err := config.load(ALIAS_CONFIG_PATH)
+	if err != OK:
+		return
+	if not config.has_section("aliases"):
+		return
+
+	for key in config.get_section_keys("aliases"):
+		var alias_name := str(key).to_lower()
+		var expansion := str(config.get_value("aliases", key, "")).strip_edges()
+		if alias_name.is_empty() or expansion.is_empty():
+			continue
+		_aliases[alias_name] = expansion
+
+func _save_aliases_to_config() -> void:
+	var config := ConfigFile.new()
+	for alias_name_variant in _aliases.keys():
+		var alias_name := str(alias_name_variant)
+		config.set_value("aliases", alias_name, str(_aliases[alias_name]))
+	config.save(ALIAS_CONFIG_PATH)
 #endregion
 
 #region Editor commands

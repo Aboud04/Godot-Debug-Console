@@ -159,10 +159,10 @@ func _collect_properties(target: Object) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for prop in target.get_property_list():
 		var usage := int(prop.get("usage", 0))
-		# Skip internal-only entries and group/category headers
+		# Skip internal entries and section/group pseudo-properties.
 		if usage & PROPERTY_USAGE_INTERNAL:
 			continue
-		if not (usage & (PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR)):
+		if usage & (PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP | PROPERTY_USAGE_CATEGORY):
 			continue
 		var prop_name := str(prop.get("name", ""))
 		if prop_name.is_empty():

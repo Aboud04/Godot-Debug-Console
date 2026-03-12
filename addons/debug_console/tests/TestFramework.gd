@@ -483,6 +483,55 @@ func run_builtin_commands_tests():
 		var result = commands._cmd_set(["MissingTarget.value", "1"])
 		return result == "Error: Target not found"
 	)
+
+	# --- alias/unalias tests ---
+	test("Built-in Commands - Alias Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("alias") and registry._commands.has("unalias")
+	)
+
+	test("Built-in Commands - Alias Usage And Execution", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_unalias(["techo"])
+		var set_result = commands._cmd_alias(["techo", "echo"])
+		var run_result = registry.execute_command("techo hello")
+		commands._cmd_unalias(["techo"])
+		return set_result.begins_with("Alias set:") and run_result == "hello"
+	)
+
+	test("Built-in Commands - Unalias Removes Command", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_alias(["techo", "echo"])
+		var remove_result = commands._cmd_unalias(["techo"])
+		var run_result = registry.execute_command("techo hello")
+		return remove_result == "Alias removed: techo" and run_result == "Unknown command: techo"
+	)
+
+	test("Built-in Commands - Alias Persists To ConfigFile", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_unalias(["tpersist"])
+		var set_result = commands._cmd_alias(["tpersist", "echo persistent"])
+		var cfg = ConfigFile.new()
+		var load_err = cfg.load("user://debug_console_aliases.cfg")
+		var saved = load_err == OK and str(cfg.get_value("aliases", "tpersist", "")) == "echo persistent"
+		commands._cmd_unalias(["tpersist"])
+		return set_result.begins_with("Alias set:") and saved
+	)
+
+	test("Built-in Commands - Alias Reload From ConfigFile", func():
+		var commands_a = BuiltInCommands.new()
+		commands_a._cmd_unalias(["treload"])
+		commands_a._cmd_alias(["treload", "echo reload_ok"])
+
+		var commands_b = BuiltInCommands.new()
+		commands_b.register_universal_commands()
+		var run_result = registry.execute_command("treload")
+
+		commands_b._cmd_unalias(["treload"])
+		return run_result == "reload_ok"
+	)
+	# --- end alias/unalias tests ---
 	# --- end get/set tests ---
 	# --- end inspect tests ---
 	
