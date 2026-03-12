@@ -86,6 +86,7 @@ func register_universal_commands():
 	_registry.register_command("echo", _echo, "Echo text back", "both", true)
 	_registry.register_command("scene_tree", _cmd_scene_tree, "Print scene tree as ASCII tree", "both")
 	_registry.register_command("watch", _cmd_watch, "Monitor Engine or node properties", "both")
+	_registry.register_command("save_log", _save_log, "Export the current session log to a file", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -208,6 +209,19 @@ static func get_current_directory() -> String:
 
 static func set_current_directory(path: String):
 	global_current_directory = path
+
+func _resolve_output_path(raw_path: String) -> String:
+	var trimmed_path := raw_path.strip_edges()
+	if trimmed_path.is_empty():
+		return ""
+
+	if trimmed_path.begins_with("res://") or trimmed_path.begins_with("user://"):
+		return trimmed_path
+
+	if Engine.is_editor_hint():
+		return current_directory.path_join(trimmed_path)
+
+	return "user://" + trimmed_path
 
 func _list_files(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
 	var dir = DirAccess.open(current_directory)
@@ -1051,6 +1065,29 @@ func _clear_history(args: Array) -> String:
 	_ensure_dependencies()
 	_registry.clear_command_history()
 	return "History cleared"
+
+func _save_log(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: save_log <path>"
+
+	var target_path := _resolve_output_path(" ".join(args))
+	if target_path.is_empty():
+		return "Usage: save_log <path>"
+
+	var save_result: Dictionary = _core.save_history_to_file(target_path)
+	if not bool(save_result.get("ok", false)):
+		return str(save_result.get("result", "Error: Failed to save log"))
+
+	if Engine.is_editor_hint() and target_path.begins_with("res://"):
+		_refresh_filesystem([])
+
+	return "Saved %d log entries to: %s" % [
+		int(save_result.get("count", 0)),
+		str(save_result.get("path", target_path))
+	]
 #endregion
 
 #region Testing commands

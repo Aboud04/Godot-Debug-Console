@@ -46,7 +46,12 @@ func focus_command_input():
 	if not is_inside_tree() or not input_line:
 		return
 
-	input_line.grab_focus()
+	input_line.call_deferred("grab_focus")
+	call_deferred("_apply_input_caret")
+
+func _apply_input_caret():
+	if not input_line:
+		return
 	input_line.caret_column = input_line.text.length()
 
 func _on_send_pressed():
@@ -81,7 +86,7 @@ func _execute_command(command: String):
 	_last_autocomplete_word = ""
 	_matching_commands.clear()
 	
-	input_line.grab_focus()
+	focus_command_input()
 
 func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 	if not output_text:
@@ -98,7 +103,7 @@ func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 			output_text.append_text(line + "\n")
 	
 	if input_line and not input_line.has_focus():
-		input_line.grab_focus()
+		focus_command_input()
 
 func clear_output():
 	if output_text:

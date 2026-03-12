@@ -320,6 +320,36 @@ func run_builtin_commands_tests():
 		core.clear_watches()
 		return add_result.contains("Watching Engine.time_scale = ") and poll_result.contains("WATCH Engine.time_scale = 0.5")
 	)
+
+	test("Built-in Commands - Save Log Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("save_log")
+	)
+
+	test("Built-in Commands - Save Log Usage", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._save_log([])
+		return result == "Usage: save_log <path>"
+	)
+
+	test("Built-in Commands - Save Log Creates File", func():
+		var commands = BuiltInCommands.new()
+		var core := _debug_core()
+		if not core:
+			return false
+		core.clear_history()
+		core.info("SaveLog built-in test line")
+		var filename = ".test_save_log_" + str(Time.get_ticks_msec()) + ".txt"
+		var result = commands._save_log([filename])
+		var full_path = "res://" + filename
+		var file = FileAccess.open(full_path, FileAccess.READ)
+		var content = file.get_as_text() if file else ""
+		if file:
+			file.close()
+		cleanup_test_file(filename)
+		return result.contains("Saved 1 log entries to: " + full_path) and content.contains("SaveLog built-in test line")
+	)
 	
 	if Engine.is_editor_hint():
 		test("Built-in Commands - List Files", func():
@@ -692,6 +722,13 @@ func run_editor_console_tests():
 		# Skip UI tests as they require proper scene tree setup
 		return true
 	)
+
+	test("Editor Console - Focus Helper Safe", func():
+		var console = EditorConsole.new()
+		console.focus_command_input()
+		console.queue_free()
+		return true
+	)
 	
 	test("Editor Console - Empty Command Handling", func():
 		# Skip UI tests as they require proper scene tree setup
@@ -743,6 +780,13 @@ func run_game_console_tests():
 	
 	test("Game Console - Target Height", func():
 		# Skip UI tests as they require proper scene tree setup
+		return true
+	)
+
+	test("Game Console - Focus Helper Safe", func():
+		var console = GameConsole.new()
+		console.focus_command_input()
+		console.queue_free()
 		return true
 	)
 
@@ -1060,6 +1104,25 @@ func run_integration_tests():
 		core.clear_watches()
 		_cleanup_watch_fixture(fixture)
 		return passed
+	)
+
+	test("Integration - Save Log Command Execution", func():
+		var commands = BuiltInCommands.new()
+		commands.register_editor_commands()
+		var core := _debug_core()
+		if not core:
+			return false
+		core.clear_history()
+		core.info("SaveLog integration test line")
+		var filename = ".test_save_log_integration_" + str(Time.get_ticks_msec()) + ".txt"
+		var result = registry.execute_command("save_log %s" % filename)
+		var full_path = "res://" + filename
+		var file = FileAccess.open(full_path, FileAccess.READ)
+		var content = file.get_as_text() if file else ""
+		if file:
+			file.close()
+		cleanup_test_file(filename)
+		return result.contains(full_path) and content.contains("SaveLog integration test line")
 	)
 
 func run_performance_tests():

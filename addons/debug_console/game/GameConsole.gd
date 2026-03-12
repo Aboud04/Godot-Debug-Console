@@ -78,6 +78,7 @@ func show_console():
 	
 	visible = true
 	is_animating = true
+	focus_command_input()
 	
 	var tween = create_tween()
 	tween.tween_method(_update_height, 0.0, target_height, 0.3)
@@ -97,9 +98,19 @@ func _update_height(height: float):
 	custom_minimum_size.y = height
 	size.y = height
 
+func focus_command_input():
+	if not input_line:
+		return
+	input_line.call_deferred("grab_focus")
+	call_deferred("_apply_input_caret")
+
+func _apply_input_caret():
+	if input_line:
+		input_line.caret_column = input_line.text.length()
+
 func _on_show_complete():
 	is_animating = false
-	input_line.grab_focus()
+	focus_command_input()
 
 func _on_hide_complete():
 	is_animating = false
@@ -123,11 +134,11 @@ func _execute_command(command: String):
 		return
 
 	var result = registry.execute_command(command)
-	if not result.is_empty():
-		add_log_message(result, LOG_LEVEL_INFO)
+	if result != null and not str(result).is_empty():
+		add_log_message(str(result), LOG_LEVEL_INFO)
 	
 	input_line.clear()
-	input_line.grab_focus()
+	focus_command_input()
 
 func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 	if not output_text:
