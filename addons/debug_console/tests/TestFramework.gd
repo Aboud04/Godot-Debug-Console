@@ -525,7 +525,9 @@ func run_builtin_commands_tests():
 		commands_a._cmd_alias(["treload", "echo reload_ok"])
 
 		var commands_b = BuiltInCommands.new()
-		commands_b.register_universal_commands()
+		commands_b._ensure_dependencies()
+		commands_b._load_aliases_from_config()
+		commands_b._register_alias_commands()
 		var run_result = registry.execute_command("treload")
 
 		commands_b._cmd_unalias(["treload"])
@@ -564,6 +566,46 @@ func run_builtin_commands_tests():
 		return result == "Error: benchmark cannot run benchmark recursively"
 	)
 	# --- end benchmark tests ---
+
+	# --- config tests ---
+	test("Built-in Commands - Config Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("config")
+	)
+
+	test("Built-in Commands - Config Usage", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_config(["unknown"])
+		return result == "Usage: config <list|get|set|reset> ..."
+	)
+
+	test("Built-in Commands - Config Set And Get", func():
+		var commands = BuiltInCommands.new()
+		var set_result = commands._cmd_config(["set", "opacity", "0.7"])
+		var get_result = commands._cmd_config(["get", "opacity"])
+		commands._cmd_config(["reset", "opacity"])
+		return set_result == "config opacity set to 0.7" and get_result == "config opacity = 0.7"
+	)
+
+	test("Built-in Commands - Config Reset Key", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_config(["set", "font_size", "22"])
+		var reset_result = commands._cmd_config(["reset", "font_size"])
+		var get_result = commands._cmd_config(["get", "font_size"])
+		return reset_result == "config font_size reset to 14" and get_result == "config font_size = 14"
+	)
+
+	test("Built-in Commands - Config Persists To File", func():
+		var commands = BuiltInCommands.new()
+		commands._cmd_config(["set", "height", "420"])
+		var cfg := ConfigFile.new()
+		var load_err := cfg.load("user://debug_console_config.cfg")
+		var persisted := load_err == OK and int(cfg.get_value("console", "height", 0)) == 420
+		commands._cmd_config(["reset", "height"])
+		return persisted
+	)
+	# --- end config tests ---
 	# --- end get/set tests ---
 	# --- end inspect tests ---
 	

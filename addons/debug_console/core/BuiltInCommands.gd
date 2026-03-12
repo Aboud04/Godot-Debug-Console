@@ -9,6 +9,14 @@ var _registered_alias_names: Array[String] = []
 var _active_alias_calls: Array[String] = []
 
 const ALIAS_CONFIG_PATH := "user://debug_console_aliases.cfg"
+const CONSOLE_CONFIG_PATH := "user://debug_console_config.cfg"
+const CONSOLE_CONFIG_SECTION := "console"
+
+const _DEFAULT_CONSOLE_CONFIG := {
+	"opacity": 0.85,
+	"font_size": 14,
+	"height": 400,
+}
 
 func initialize(registry: Node, core: Node) -> void:
 	_registry = registry
@@ -98,6 +106,7 @@ func register_universal_commands():
 	_registry.register_command("alias", _cmd_alias, "Create/list persistent aliases", "both")
 	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
 	_registry.register_command("benchmark", _cmd_benchmark, "Benchmark a command: benchmark [iterations] <command>", "both")
+	_registry.register_command("config", _cmd_config, "Manage persistent console settings", "both")
 	_load_aliases_from_config()
 	_register_alias_commands()
 
@@ -403,6 +412,92 @@ func _cmd_benchmark(args: Array) -> String:
 		float(max_us) / 1000.0,
 		("\nLast result: %s" % last_result) if not last_result.is_empty() else ""
 	]
+
+func _cmd_config(args: Array) -> String:
+	if args.is_empty():
+		return _config_list()
+
+	var action := str(args[0]).to_lower()
+	match action:
+		"list":
+			return _config_list()
+		"get":
+			if args.size() < 2:
+				return "Usage: config get <key>"
+			var key := str(args[1]).to_lower()
+			if not _DEFAULT_CONSOLE_CONFIG.has(key):
+				return "Error: Unknown config key: %s" % key
+			var values := _load_console_config_values()
+			return "config %s = %s" % [key, str(values.get(key, _DEFAULT_CONSOLE_CONFIG[key]))]
+		"set":
+			if args.size() < 3:
+				return "Usage: config set <key> <value>"
+			var key := str(args[1]).to_lower()
+			if not _DEFAULT_CONSOLE_CONFIG.has(key):
+				return "Error: Unknown config key: %s" % key
+			var raw_value := " ".join(args.slice(2)).strip_edges()
+			var parsed := _parse_config_value(key, raw_value)
+			if not bool(parsed.get("ok", false)):
+				return str(parsed.get("result", "Error: Invalid value"))
+			var values := _load_console_config_values()
+			values[key] = parsed.get("value")
+			_save_console_config_values(values)
+			return "config %s set to %s" % [key, str(values[key])]
+		"reset":
+			if args.size() == 1:
+				_save_console_config_values(_DEFAULT_CONSOLE_CONFIG.duplicate(true))
+				return "config reset to defaults"
+			var key := str(args[1]).to_lower()
+			if not _DEFAULT_CONSOLE_CONFIG.has(key):
+				return "Error: Unknown config key: %s" % key
+			var values := _load_console_config_values()
+			values[key] = _DEFAULT_CONSOLE_CONFIG[key]
+			_save_console_config_values(values)
+			return "config %s reset to %s" % [key, str(values[key])]
+		_:
+			return "Usage: config <list|get|set|reset> ..."
+
+func _config_list() -> String:
+	var values := _load_console_config_values()
+	var keys := values.keys()
+	keys.sort()
+	var lines: Array[String] = ["Console config:"]
+	for key_variant in keys:
+		var key := str(key_variant)
+		lines.append("  %s = %s" % [key, str(values[key])])
+	return "\n".join(lines)
+
+func _load_console_config_values() -> Dictionary:
+	var values := _DEFAULT_CONSOLE_CONFIG.duplicate(true)
+	var config := ConfigFile.new()
+	if config.load(CONSOLE_CONFIG_PATH) != OK:
+		return values
+	if not config.has_section(CONSOLE_CONFIG_SECTION):
+		return values
+	for key_variant in _DEFAULT_CONSOLE_CONFIG.keys():
+		var key := str(key_variant)
+		if config.has_section_key(CONSOLE_CONFIG_SECTION, key):
+			values[key] = config.get_value(CONSOLE_CONFIG_SECTION, key, _DEFAULT_CONSOLE_CONFIG[key])
+	return values
+
+func _save_console_config_values(values: Dictionary) -> void:
+	var config := ConfigFile.new()
+	for key_variant in _DEFAULT_CONSOLE_CONFIG.keys():
+		var key := str(key_variant)
+		config.set_value(CONSOLE_CONFIG_SECTION, key, values.get(key, _DEFAULT_CONSOLE_CONFIG[key]))
+	config.save(CONSOLE_CONFIG_PATH)
+
+func _parse_config_value(key: String, raw_value: String) -> Dictionary:
+	var default_value = _DEFAULT_CONSOLE_CONFIG[key]
+	if default_value is float:
+		if not raw_value.is_valid_float():
+			return {"ok": false, "result": "Error: %s expects a float" % key}
+		return {"ok": true, "value": float(raw_value)}
+	if default_value is int:
+		if not raw_value.is_valid_int():
+			return {"ok": false, "result": "Error: %s expects an int" % key}
+		return {"ok": true, "value": int(raw_value)}
+	return {"ok": true, "value": raw_value}
 
 func _register_alias_commands() -> void:
 	if not _registry:
