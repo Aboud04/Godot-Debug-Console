@@ -350,6 +350,67 @@ func run_builtin_commands_tests():
 		cleanup_test_file(filename)
 		return result.contains("Saved 1 log entries to: " + full_path) and content.contains("SaveLog built-in test line")
 	)
+
+	# --- inspect tests ---
+	test("Built-in Commands - Inspect Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("inspect")
+	)
+
+	test("Built-in Commands - Inspect Usage Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect([])
+		return result == "Usage: inspect <node_path|autoload_name|Engine>"
+	)
+
+	test("Built-in Commands - Inspect Engine Singleton", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["Engine"])
+		return result.contains("=== Engine ===") and result.contains("Class: Engine")
+	)
+
+	test("Built-in Commands - Inspect Engine Shows Properties", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["Engine"])
+		# Engine always exposes max_fps, time_scale, physics_ticks_per_second, etc.
+		return result.contains("max_fps") or result.contains("time_scale") or result.contains("Properties:")
+	)
+
+	test("Built-in Commands - Inspect Invalid Path Returns Error", func():
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["NonExistentNodeXYZZY_9999"])
+		return result.begins_with("Error:")
+	)
+
+	test("Built-in Commands - Inspect DebugCore By Short Name", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["DebugCore"])
+		return result.contains("DebugCore") and not result.begins_with("Error:")
+	)
+
+	test("Built-in Commands - Inspect DebugCore By Absolute Path", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["/root/DebugCore"])
+		return result.contains("DebugCore") and not result.begins_with("Error:")
+	)
+
+	test("Built-in Commands - Inspect Shows max_history_size Property", func():
+		var core := _debug_core()
+		if not core:
+			return false
+		var commands = BuiltInCommands.new()
+		var result = commands._cmd_inspect(["DebugCore"])
+		# max_history_size is a declared @export-style var in DebugCore
+		return result.contains("max_history_size")
+	)
+	# --- end inspect tests ---
 	
 	if Engine.is_editor_hint():
 		test("Built-in Commands - List Files", func():

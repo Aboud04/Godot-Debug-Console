@@ -87,6 +87,7 @@ func register_universal_commands():
 	_registry.register_command("scene_tree", _cmd_scene_tree, "Print scene tree as ASCII tree", "both")
 	_registry.register_command("watch", _cmd_watch, "Monitor Engine or node properties", "both")
 	_registry.register_command("save_log", _save_log, "Export the current session log to a file", "both")
+	_registry.register_command("inspect", _cmd_inspect, "Dump all properties of a node, autoload, or Engine", "both")
 
 #region Universal commands
 func _help(args: Array) -> String:
@@ -170,6 +171,61 @@ func _watch_list() -> String:
 			str(watch_entry.get("last_value", ""))
 		])
 	return "\n".join(lines)
+
+func _cmd_inspect(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: inspect <node_path|autoload_name|Engine>"
+
+	var path := " ".join(args).strip_edges()
+	var result: Dictionary = _core.inspect_node(path)
+	if not bool(result.get("ok", false)):
+		return str(result.get("result", "Error: inspect failed"))
+
+	var display_path := str(result.get("display_path", path))
+	var class_name_str := str(result.get("class_name", "?"))
+	var properties: Array = result.get("properties", [])
+
+	var lines: Array[String] = []
+	lines.append("=== %s ===" % display_path)
+	lines.append("Class: %s  |  Properties: %d" % [class_name_str, properties.size()])
+	lines.append("─────────────────────────────────────────────────")
+	for prop in properties:
+		lines.append("  [%-8s] %-24s = %s" % [
+			_inspect_type_name(int(prop.get("type", 0))),
+			str(prop.get("name", "")),
+			str(prop.get("value", "null"))
+		])
+	return "\n".join(lines)
+
+func _inspect_type_name(type_id: int) -> String:
+	match type_id:
+		TYPE_BOOL: return "Bool"
+		TYPE_INT: return "Int"
+		TYPE_FLOAT: return "Float"
+		TYPE_STRING: return "String"
+		TYPE_VECTOR2: return "Vector2"
+		TYPE_VECTOR2I: return "Vector2i"
+		TYPE_RECT2: return "Rect2"
+		TYPE_VECTOR3: return "Vector3"
+		TYPE_VECTOR3I: return "Vector3i"
+		TYPE_TRANSFORM2D: return "Xform2D"
+		TYPE_COLOR: return "Color"
+		TYPE_STRING_NAME: return "SName"
+		TYPE_NODE_PATH: return "NodePath"
+		TYPE_RID: return "RID"
+		TYPE_OBJECT: return "Object"
+		TYPE_CALLABLE: return "Callable"
+		TYPE_SIGNAL: return "Signal"
+		TYPE_DICTIONARY: return "Dict"
+		TYPE_ARRAY: return "Array"
+		TYPE_PACKED_BYTE_ARRAY: return "ByteArr"
+		TYPE_PACKED_STRING_ARRAY: return "StrArr"
+		TYPE_TRANSFORM3D: return "Xform3D"
+		TYPE_BASIS: return "Basis"
+		_: return "Variant"
 #endregion
 
 #region Editor commands

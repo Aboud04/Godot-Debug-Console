@@ -113,6 +113,69 @@ func save_history_to_file(file_path: String) -> Dictionary:
 		"count": _message_history.size(),
 	}
 
+#region Inspect
+func inspect_node(path: String) -> Dictionary:
+	var target := _resolve_inspect_target(path.strip_edges())
+	if not is_instance_valid(target):
+		return {"ok": false, "result": "Error: Target not found: %s" % path}
+
+	var display_path := ""
+	if target is Node:
+		display_path = str(target.get_path()) if target.is_inside_tree() else target.name
+	else:
+		display_path = path
+
+	return {
+		"ok": true,
+		"display_path": display_path,
+		"class_name": target.get_class(),
+		"properties": _collect_properties(target),
+	}
+
+func _resolve_inspect_target(path: String) -> Object:
+	if path.is_empty():
+		return null
+
+	if path == "Engine":
+		return Engine
+
+	var tree := get_tree()
+	if not tree:
+		return null
+
+	# Absolute node path
+	if path.begins_with("/"):
+		return tree.root.get_node_or_null(NodePath(path))
+
+	# Try as autoload shortname: root child named <path>
+	var autoload := tree.root.get_node_or_null(path)
+	if autoload:
+		return autoload
+
+	# Recursive child search across scene tree
+	return tree.root.find_child(path, true, false)
+
+func _collect_properties(target: Object) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for prop in target.get_property_list():
+		var usage := int(prop.get("usage", 0))
+		# Skip internal-only entries and group/category headers
+		if usage & PROPERTY_USAGE_INTERNAL:
+			continue
+		if not (usage & (PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR)):
+			continue
+		var prop_name := str(prop.get("name", ""))
+		if prop_name.is_empty():
+			continue
+		var raw_value = target.get(prop_name)
+		result.append({
+			"name": prop_name,
+			"type": int(prop.get("type", TYPE_NIL)),
+			"value": _format_watch_value(raw_value) if raw_value != null else "<null>",
+		})
+	return result
+#endregion
+
 func add_watch(expression: String) -> Dictionary:
 	var normalized_expression := expression.strip_edges()
 	if normalized_expression.is_empty():
