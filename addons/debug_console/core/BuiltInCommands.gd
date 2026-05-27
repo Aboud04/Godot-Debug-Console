@@ -113,6 +113,14 @@ func register_game_commands():
 	_registry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
 	_registry.register_command("opacity", _cmd_opacity, "Set console background opacity (0-100 or 0.0-1.0)", "game")
 	_registry.register_command("intercept", _cmd_intercept, "Toggle interception of global print/warning/error output (on|off|status)", "game")
+	# T5 - New commands
+	_registry.register_command("perf", _cmd_perf, "Show Performance.Monitor dashboard; optionally filter by name", "game")
+	_registry.register_command("show_colliders", _cmd_show_colliders, "Toggle CollisionShape debug rendering: show_colliders [on|off]", "game")
+	_registry.register_command("show_nav", _cmd_show_nav, "Toggle navigation polygon debug rendering: show_nav [on|off]", "game")
+	_registry.register_command("show_paths", _cmd_show_paths, "Toggle PathFollow path debug rendering: show_paths [on|off]", "game")
+	_registry.register_command("slowmo", _cmd_slowmo, "Slow-motion shortcut: slowmo [factor|off] (default 0.25)", "game")
+	_registry.register_command("freeze", _cmd_freeze, "Freeze time (Engine.time_scale = 0); resume with 'slowmo off'", "game")
+	_registry.register_command("physics_tps", _cmd_physics_tps, "Get/set Engine.physics_ticks_per_second (1-1000)", "game")
 
 func register_universal_commands():
 	_ensure_dependencies()
@@ -137,6 +145,10 @@ func register_universal_commands():
 	_registry.register_command("properties", _cmd_properties, "List property names and types on a live target (no values)", "both")
 	# W1 - pretty-print arbitrary JSON. Pipe-aware so `echo '...' | json` works.
 	_registry.register_command("json", _cmd_json, "Pretty-print JSON: json <text> (also pipe-able)", "both", true)
+	# T5 - New commands
+	_registry.register_command("eval", _cmd_eval, "Evaluate a GDScript expression (sandboxed: no defs/assigns)", "both")
+	_registry.register_command("mark", _cmd_mark, "Print a colored timestamped marker for log syncing", "both")
+	_registry.register_command("crashtest", _cmd_crashtest, "Fire assert(false) to validate crash reporting", "both")
 	_load_aliases_from_config()
 	_register_alias_commands()
 
@@ -2407,3 +2419,245 @@ func _format_duration_ms(ms: int) -> String:
 	var seconds: int = total_seconds % 60
 	return "%dm%ds" % [minutes, seconds]
 #endregion
+
+#region T5 - New commands
+
+# T5 - REPL using the sandboxed Expression class. Cannot define functions or
+# assign variables, but supports literals, operators, constructors, autoload
+# refs, and (at runtime) `get_node("/root/...")` via the SceneTree root as
+# base instance.
+func _cmd_eval(args: Array) -> String:
+	if args.is_empty():
+		return "Usage: eval <gdscript expression>"
+	var code: String = " ".join(args).strip_edges()
+	if code.is_empty():
+		return "Usage: eval <gdscript expression>"
+	var expr := Expression.new()
+	var err: int = expr.parse(code)
+	if err != OK:
+		return "Error: parse failed - " + expr.get_error_text()
+	var base_instance: Object = null
+	if not Engine.is_editor_hint():
+		var tree := Engine.get_main_loop() as SceneTree
+		if tree:
+			base_instance = tree.root
+	var result: Variant = expr.execute([], base_instance, true)
+	if expr.has_execute_failed():
+		return "Error: execute failed - " + expr.get_error_text()
+	if result == null:
+		return "null"
+	return str(result)
+
+# T5 - Performance.Monitor dashboard. Groups monitors into categories with
+# BBCode-colored headers. Optional first arg filters by case-insensitive
+# substring match against the display name.
+func _cmd_perf(args: Array) -> String:
+	var groups: Array = _dc_perf_monitor_groups()
+	var filter: String = ""
+	if args.size() > 0:
+		filter = str(args[0]).strip_edges().to_lower()
+
+	var lines: Array[String] = []
+	var matched_any: bool = false
+	for group in groups:
+		var category: String = group[0]
+		var monitors: Array = group[1]
+		var category_lines: Array[String] = []
+		for mon in monitors:
+			var enum_val: int = int(mon[0])
+			var display_name: String = String(mon[1])
+			var unit: String = String(mon[2])
+			var multiplier: float = float(mon[3]) if mon.size() > 3 else 1.0
+			if not filter.is_empty() and not display_name.to_lower().contains(filter):
+				continue
+			var raw_value: float = 0.0
+			# Performance.get_monitor() returns 0.0 for unsupported monitors
+			# in headless or older builds; we still display them rather than
+			# hide because zero is itself informative for most monitors.
+			raw_value = Performance.get_monitor(enum_val)
+			var formatted: String = _dc_format_perf_value(raw_value * multiplier, unit)
+			category_lines.append("  %-42s = [color=#F7DC6F]%s[/color]" % [display_name, formatted])
+			matched_any = true
+		if not category_lines.is_empty():
+			lines.append("[color=#5FBEE0]== %s ==[/color]" % category)
+			lines.append_array(category_lines)
+	if not matched_any:
+		return "No performance monitors matched filter: %s" % filter
+	return "\n".join(lines)
+
+func _dc_perf_monitor_groups() -> Array:
+	# Each row: [enum_value, display_name, unit_suffix, optional_multiplier]
+	# Time monitors are seconds internally; multiplier 1000.0 converts to ms.
+	return [
+		["Time", [
+			[Performance.TIME_FPS, "FPS", ""],
+			[Performance.TIME_PROCESS, "Process Time", "ms", 1000.0],
+			[Performance.TIME_PHYSICS_PROCESS, "Physics Process Time", "ms", 1000.0],
+			[Performance.TIME_NAVIGATION_PROCESS, "Navigation Process Time", "ms", 1000.0],
+		]],
+		["Memory", [
+			[Performance.MEMORY_STATIC, "Static Memory", "B"],
+			[Performance.MEMORY_STATIC_MAX, "Static Memory Peak", "B"],
+			[Performance.MEMORY_MESSAGE_BUFFER_MAX, "Message Buffer Peak", "B"],
+		]],
+		["Object", [
+			[Performance.OBJECT_COUNT, "Object Count", ""],
+			[Performance.OBJECT_RESOURCE_COUNT, "Resource Count", ""],
+			[Performance.OBJECT_NODE_COUNT, "Node Count", ""],
+			[Performance.OBJECT_ORPHAN_NODE_COUNT, "Orphan Node Count", ""],
+		]],
+		["Render", [
+			[Performance.RENDER_TOTAL_OBJECTS_IN_FRAME, "Objects in Frame", ""],
+			[Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME, "Primitives in Frame", ""],
+			[Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME, "Draw Calls in Frame", ""],
+			[Performance.RENDER_VIDEO_MEM_USED, "Video Memory", "B"],
+			[Performance.RENDER_TEXTURE_MEM_USED, "Texture Memory", "B"],
+			[Performance.RENDER_BUFFER_MEM_USED, "Buffer Memory", "B"],
+		]],
+		["Physics", [
+			[Performance.PHYSICS_2D_ACTIVE_OBJECTS, "2D Active Objects", ""],
+			[Performance.PHYSICS_2D_COLLISION_PAIRS, "2D Collision Pairs", ""],
+			[Performance.PHYSICS_2D_ISLAND_COUNT, "2D Islands", ""],
+			[Performance.PHYSICS_3D_ACTIVE_OBJECTS, "3D Active Objects", ""],
+			[Performance.PHYSICS_3D_COLLISION_PAIRS, "3D Collision Pairs", ""],
+			[Performance.PHYSICS_3D_ISLAND_COUNT, "3D Islands", ""],
+		]],
+		["Audio", [
+			[Performance.AUDIO_OUTPUT_LATENCY, "Audio Output Latency", "s"],
+		]],
+		["Navigation", [
+			[Performance.NAVIGATION_ACTIVE_MAPS, "Navigation Active Maps", ""],
+			[Performance.NAVIGATION_REGION_COUNT, "Navigation Regions", ""],
+			[Performance.NAVIGATION_AGENT_COUNT, "Navigation Agents", ""],
+			[Performance.NAVIGATION_LINK_COUNT, "Navigation Links", ""],
+			[Performance.NAVIGATION_POLYGON_COUNT, "Navigation Polygons", ""],
+			[Performance.NAVIGATION_EDGE_COUNT, "Navigation Edges", ""],
+			[Performance.NAVIGATION_EDGE_MERGE_COUNT, "Navigation Merged Edges", ""],
+			[Performance.NAVIGATION_EDGE_CONNECTION_COUNT, "Navigation Connections", ""],
+			[Performance.NAVIGATION_EDGE_FREE_COUNT, "Navigation Free Edges", ""],
+		]],
+		["Pipeline", [
+			[Performance.PIPELINE_COMPILATIONS_CANVAS, "Canvas Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_MESH, "Mesh Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_SURFACE, "Surface Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_DRAW, "Draw Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_SPECIALIZATION, "Specialization Pipeline Compilations", ""],
+		]],
+	]
+
+func _dc_format_perf_value(value: float, unit: String) -> String:
+	if unit == "B":
+		return _dc_format_bytes(value)
+	if unit == "ms":
+		return "%.2f ms" % value
+	if unit == "s":
+		return "%.4f s" % value
+	# Integer-friendly display for counts/FPS where fractional parts are noise.
+	if absf(value - round(value)) < 0.0001:
+		return "%d" % int(round(value))
+	return "%.2f" % value
+
+func _dc_format_bytes(bytes: float) -> String:
+	var b: float = bytes
+	if b < 1024.0:
+		return "%d B" % int(b)
+	if b < 1024.0 * 1024.0:
+		return "%.1f KiB" % (b / 1024.0)
+	if b < 1024.0 * 1024.0 * 1024.0:
+		return "%.2f MiB" % (b / (1024.0 * 1024.0))
+	return "%.2f GiB" % (b / (1024.0 * 1024.0 * 1024.0))
+
+# T5 - Toggle CollisionShape debug rendering. Editor-mode is rejected because
+# enabling it on the editor's SceneTree would affect the editor viewport, not
+# the running game. Nodes redraw their debug shapes on the next physics step.
+func _cmd_show_colliders(args: Array) -> String:
+	return _dc_toggle_scene_tree_flag(args, "debug_collisions_hint", "Collision shape rendering", "show_colliders")
+
+func _cmd_show_nav(args: Array) -> String:
+	return _dc_toggle_scene_tree_flag(args, "debug_navigation_hint", "Navigation polygon rendering", "show_nav")
+
+func _cmd_show_paths(args: Array) -> String:
+	return _dc_toggle_scene_tree_flag(args, "debug_paths_hint", "Path rendering", "show_paths")
+
+func _dc_toggle_scene_tree_flag(args: Array, flag_name: String, label: String, cmd_name: String) -> String:
+	if Engine.is_editor_hint():
+		return "Error: %s only works in runtime" % cmd_name
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return "Error: %s requires an active SceneTree" % cmd_name
+	var current: bool = bool(tree.get(flag_name))
+	var target: bool = not current
+	if args.size() > 0:
+		var sub: String = str(args[0]).strip_edges().to_lower()
+		match sub:
+			"on", "true", "1", "yes":
+				target = true
+			"off", "false", "0", "no":
+				target = false
+			_:
+				return "Usage: %s [on|off]" % cmd_name
+	tree.set(flag_name, target)
+	return "%s: %s" % [label, ("ON" if target else "OFF")]
+
+# T5 - Colored timestamped sync marker. Useful for matching console output
+# against external recordings, log dumps, or screen captures.
+func _cmd_mark(args: Array) -> String:
+	var label: String = " ".join(args).strip_edges()
+	if label.is_empty():
+		label = "MARK"
+	var ts: String = Time.get_time_string_from_system()
+	return "[color=#FFD700]===== %s ===== %s ===== %s =====[/color]" % [ts, label, ts]
+
+# T5 - Slow-motion shortcut. `slowmo` defaults to 0.25; `slowmo off` resets to
+# 1.0. Negative or zero values are rejected (use `freeze` for 0.0).
+func _cmd_slowmo(args: Array) -> String:
+	if Engine.is_editor_hint():
+		return "Error: slowmo only works in runtime"
+	if args.size() > 0:
+		var sub: String = str(args[0]).strip_edges().to_lower()
+		if sub == "off" or sub == "reset":
+			Engine.time_scale = 1.0
+			return "Time scale: 1.0 (normal speed)"
+		if not sub.is_valid_float():
+			return "Error: slowmo expects a positive number or 'off', got: %s" % sub
+		var factor: float = sub.to_float()
+		if factor <= 0.0:
+			return "Error: slowmo factor must be > 0 (use 'freeze' for 0)"
+		Engine.time_scale = factor
+		return "Time scale: %.3f (slow motion)" % factor
+	Engine.time_scale = 0.25
+	return "Time scale: 0.25 (slow motion)"
+
+# T5 - Freeze time without using the pause flag. Useful for inspecting a live
+# scene without disabling _process callbacks that depend on time_scale.
+func _cmd_freeze(args: Array) -> String:
+	if Engine.is_editor_hint():
+		return "Error: freeze only works in runtime"
+	Engine.time_scale = 0.0
+	return "Time scale: 0.0 (frozen). Use 'timescale 1.0' or 'slowmo off' to resume."
+
+# T5 - Get/set the physics tick rate. Valid range 1-1000 matches Godot's own
+# project setting bounds. Reading is allowed in editor mode; writing is too,
+# since Engine.physics_ticks_per_second has no SceneTree dependency.
+func _cmd_physics_tps(args: Array) -> String:
+	if args.is_empty():
+		return "Physics TPS: %d" % Engine.physics_ticks_per_second
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_int():
+		return "Error: physics_tps takes an integer"
+	var n: int = raw.to_int()
+	if n < 1 or n > 1000:
+		return "Error: physics_tps must be between 1 and 1000, got: %d" % n
+	Engine.physics_ticks_per_second = n
+	return "Physics TPS: %d" % Engine.physics_ticks_per_second
+
+# T5 - Fire assert(false) to validate crash reporting. In debug builds the
+# assert halts execution; in release builds assert is a no-op and only the
+# returned string is observable.
+func _cmd_crashtest(args: Array) -> String:
+	var msg: String = "Crashtest fired. If you see this in the console but no crash, asserts are disabled in release mode."
+	assert(false, "crashtest fired via debug console")
+	return msg
+
+#endregion
+

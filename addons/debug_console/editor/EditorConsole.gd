@@ -96,6 +96,13 @@ var _reverse_search_pre_input: String = ""
 var _reverse_search_pre_caret: int = 0
 var _reverse_search_pre_placeholder: String = ""
 
+# --- T5 readline shortcuts: kill ring (single-slot, per-instance) ---
+# Holds the last killed text from Ctrl+W / Ctrl+K for Ctrl+Y to yank back
+# at the caret. Bash uses a multi-slot ring; one slot is enough here since
+# nothing in the addon needs ring rotation today. Independent per console
+# instance - no global sharing between EditorConsole and GameConsole.
+var _kill_ring: String = ""
+
 const _MAX_POPUP_ITEMS := 12
 
 func _command_registry() -> Node:
@@ -554,6 +561,39 @@ func _on_input_line_gui_input(event):
 				# verbatim, then hand control to _handle_reverse_search_key.
 				_last_input_action = "reverse_search"
 				_enter_reverse_search()
+				accept_event()
+				return
+			# --- T5 readline shortcuts (Ctrl+W / Ctrl+K / Ctrl+Y) ---
+			KEY_W:
+				_last_input_action = "kill_word_backward"
+				_t5_kill_word_backward()
+				accept_event()
+				return
+			KEY_K:
+				_last_input_action = "kill_to_end_of_line"
+				_t5_kill_to_end_of_line()
+				accept_event()
+				return
+			KEY_Y:
+				_last_input_action = "yank"
+				_t5_yank()
+				accept_event()
+				return
+	
+	# --- T5 readline shortcuts: Alt+B / Alt+F word navigation ---
+	# Require alt without ctrl so Ctrl+Alt+B isn't accidentally captured.
+	# The reverse-search guard above already short-circuits during search,
+	# so these branches are inert in that mode.
+	if key_event.alt_pressed and not ctrl:
+		match key_event.keycode:
+			KEY_B:
+				_last_input_action = "word_back"
+				_t5_move_word_back()
+				accept_event()
+				return
+			KEY_F:
+				_last_input_action = "word_forward"
+				_t5_move_word_forward()
 				accept_event()
 				return
 	
@@ -1491,3 +1531,91 @@ func _handle_reverse_search_key(key_event: InputEventKey) -> void:
 				_reverse_search_index = command_history.size()
 				_apply_reverse_search()
 				_apply_reverse_search_placeholder()
+
+# --- T5 readline shortcuts ---
+# Bash readline parity for word-level editing in the input line:
+#   Ctrl+W  - delete word backward (push into _kill_ring)
+#   Ctrl+K  - kill from caret to end of line (push into _kill_ring)
+#   Ctrl+Y  - yank the kill ring at the caret
+#   Alt+B   - move caret one word back (no deletion)
+#   Alt+F   - move caret one word forward (no deletion)
+# Word boundary chars include shell metas and the path separator so that
+# segmented paths like res://addons/debug_console/editor navigate
+# token-by-token. Whitespace is also a boundary; alphanumerics, dots,
+# underscores, hyphens, colons and quotes are treated as word-internal.
+
+const _T5_WORD_BOUNDARY_CHARS := " \t|><&;/"
+
+func _t5_is_word_boundary(ch: String) -> bool:
+	return ch.length() > 0 and _T5_WORD_BOUNDARY_CHARS.contains(ch)
+
+func _t5_word_back_index(text: String, caret: int) -> int:
+	# Mirror bash M-b / C-w: skip boundary chars left, then non-boundary
+	# chars left. Returns the column where the previous word begins.
+	var i: int = clamp(caret, 0, text.length())
+	while i > 0 and _t5_is_word_boundary(text.substr(i - 1, 1)):
+		i -= 1
+	while i > 0 and not _t5_is_word_boundary(text.substr(i - 1, 1)):
+		i -= 1
+	return i
+
+func _t5_word_forward_index(text: String, caret: int) -> int:
+	# Mirror bash M-f: skip boundary chars right, then non-boundary chars
+	# right. Returns the column at the end of the next word.
+	var n: int = text.length()
+	var i: int = clamp(caret, 0, n)
+	while i < n and _t5_is_word_boundary(text.substr(i, 1)):
+		i += 1
+	while i < n and not _t5_is_word_boundary(text.substr(i, 1)):
+		i += 1
+	return i
+
+func _t5_kill_word_backward() -> void:
+	if not is_instance_valid(input_line):
+		return
+	input_line.deselect()
+	var text: String = input_line.text
+	var caret: int = input_line.get_caret_column()
+	var new_caret: int = _t5_word_back_index(text, caret)
+	if new_caret == caret:
+		return
+	_kill_ring = text.substr(new_caret, caret - new_caret)
+	input_line.text = text.substr(0, new_caret) + text.substr(caret)
+	input_line.set_caret_column(new_caret)
+	_user_draft = input_line.text
+
+func _t5_kill_to_end_of_line() -> void:
+	if not is_instance_valid(input_line):
+		return
+	input_line.deselect()
+	var text: String = input_line.text
+	var caret: int = input_line.get_caret_column()
+	if caret >= text.length():
+		return
+	_kill_ring = text.substr(caret)
+	input_line.text = text.substr(0, caret)
+	input_line.set_caret_column(caret)
+	_user_draft = input_line.text
+
+func _t5_yank() -> void:
+	if not is_instance_valid(input_line) or _kill_ring.is_empty():
+		return
+	input_line.deselect()
+	var text: String = input_line.text
+	var caret: int = input_line.get_caret_column()
+	input_line.text = text.substr(0, caret) + _kill_ring + text.substr(caret)
+	input_line.set_caret_column(caret + _kill_ring.length())
+	_user_draft = input_line.text
+
+func _t5_move_word_back() -> void:
+	if not is_instance_valid(input_line):
+		return
+	var new_caret: int = _t5_word_back_index(input_line.text, input_line.get_caret_column())
+	input_line.set_caret_column(new_caret)
+
+func _t5_move_word_forward() -> void:
+	if not is_instance_valid(input_line):
+		return
+	var new_caret: int = _t5_word_forward_index(input_line.text, input_line.get_caret_column())
+	input_line.set_caret_column(new_caret)
+# --- end T5 readline shortcuts ---

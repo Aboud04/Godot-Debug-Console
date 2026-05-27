@@ -1552,6 +1552,177 @@ func run_builtin_commands_tests():
 	)
 	# --- end W1 output renderer tests ---
 
+	# --- T5 new commands tests ---
+	# eval (Expression-based REPL), perf (Performance.Monitor dashboard), show_*
+	# (SceneTree debug flags), mark (sync marker), slowmo/freeze (time scale),
+	# physics_tps (tick rate), crashtest (assert validation).
+	test("Eval - Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("eval")
+	)
+
+	test("Eval - Simple Arithmetic", func():
+		var commands = BuiltInCommands.new()
+		var result: String = commands._cmd_eval(["2", "+", "2"])
+		return result == "4"
+	)
+
+	test("Eval - Vector Constructor And Method", func():
+		var commands = BuiltInCommands.new()
+		var result: String = commands._cmd_eval(["Vector2(3,", "4).length()"])
+		return result == "5" or result == "5.0"
+	)
+
+	test("Eval - Bad Syntax Returns Error", func():
+		var commands = BuiltInCommands.new()
+		var result: String = commands._cmd_eval(["bad", "syntax", "%%%"])
+		return result.begins_with("Error")
+	)
+
+	test("Perf - Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("perf")
+	)
+
+	test("Perf - Returns FPS Line", func():
+		var commands = BuiltInCommands.new()
+		var result: String = commands._cmd_perf([])
+		return not result.is_empty() and result.contains("FPS")
+	)
+
+	test("Perf - Filter Narrows Output", func():
+		var commands = BuiltInCommands.new()
+		var full: String = commands._cmd_perf([])
+		var filtered: String = commands._cmd_perf(["memory"])
+		return filtered.contains("Memory") and not filtered.contains("FPS") and filtered.length() < full.length()
+	)
+
+	test("Show Colliders - Registration", func():
+		if not registry:
+			return false
+		return registry._commands.has("show_colliders")
+	)
+
+	test("Show Colliders - Toggle Or Editor Guard", func():
+		var commands = BuiltInCommands.new()
+		if Engine.is_editor_hint():
+			var result: String = commands._cmd_show_colliders(["on"])
+			return result.begins_with("Error")
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var prev: bool = tree.debug_collisions_hint
+		commands._cmd_show_colliders(["on"])
+		var on_state: bool = tree.debug_collisions_hint
+		commands._cmd_show_colliders(["off"])
+		var off_state: bool = tree.debug_collisions_hint
+		tree.debug_collisions_hint = prev
+		return on_state == true and off_state == false
+	)
+
+	test("Show Nav - Toggle Or Editor Guard", func():
+		var commands = BuiltInCommands.new()
+		if Engine.is_editor_hint():
+			var result: String = commands._cmd_show_nav(["on"])
+			return result.begins_with("Error")
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var prev: bool = tree.debug_navigation_hint
+		commands._cmd_show_nav(["on"])
+		var on_state: bool = tree.debug_navigation_hint
+		commands._cmd_show_nav(["off"])
+		var off_state: bool = tree.debug_navigation_hint
+		tree.debug_navigation_hint = prev
+		return on_state == true and off_state == false
+	)
+
+	test("Show Paths - Toggle Or Editor Guard", func():
+		var commands = BuiltInCommands.new()
+		if Engine.is_editor_hint():
+			var result: String = commands._cmd_show_paths(["on"])
+			return result.begins_with("Error")
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var prev: bool = tree.debug_paths_hint
+		commands._cmd_show_paths(["on"])
+		var on_state: bool = tree.debug_paths_hint
+		commands._cmd_show_paths(["off"])
+		var off_state: bool = tree.debug_paths_hint
+		tree.debug_paths_hint = prev
+		return on_state == true and off_state == false
+	)
+
+	test("Mark - Default Label", func():
+		var commands = BuiltInCommands.new()
+		var result: String = commands._cmd_mark([])
+		return result.contains("MARK") and result.contains("[color=#FFD700]")
+	)
+
+	test("Mark - Custom Label Preserved", func():
+		var commands = BuiltInCommands.new()
+		var result: String = commands._cmd_mark(["hello", "world"])
+		return result.contains("hello world")
+	)
+
+	test("Slowmo - Sets Time Scale", func():
+		if Engine.is_editor_hint():
+			var commands_e = BuiltInCommands.new()
+			return commands_e._cmd_slowmo(["0.5"]).begins_with("Error")
+		var commands = BuiltInCommands.new()
+		var prev: float = Engine.time_scale
+		commands._cmd_slowmo(["0.5"])
+		var ok: bool = absf(Engine.time_scale - 0.5) < 0.0001
+		Engine.time_scale = prev
+		return ok
+	)
+
+	test("Slowmo - Off Resets Time Scale", func():
+		if Engine.is_editor_hint():
+			var commands_e = BuiltInCommands.new()
+			return commands_e._cmd_slowmo(["off"]).begins_with("Error")
+		var commands = BuiltInCommands.new()
+		var prev: float = Engine.time_scale
+		Engine.time_scale = 0.3
+		commands._cmd_slowmo(["off"])
+		var ok: bool = absf(Engine.time_scale - 1.0) < 0.0001
+		Engine.time_scale = prev
+		return ok
+	)
+
+	test("Freeze - Sets Time Scale To Zero", func():
+		if Engine.is_editor_hint():
+			var commands_e = BuiltInCommands.new()
+			return commands_e._cmd_freeze([]).begins_with("Error")
+		var commands = BuiltInCommands.new()
+		var prev: float = Engine.time_scale
+		commands._cmd_freeze([])
+		var ok: bool = Engine.time_scale == 0.0
+		Engine.time_scale = prev
+		return ok
+	)
+
+	test("Physics TPS - Get And Set Roundtrip", func():
+		var commands = BuiltInCommands.new()
+		var prev: int = Engine.physics_ticks_per_second
+		var set_result: String = commands._cmd_physics_tps(["30"])
+		var get_result: String = commands._cmd_physics_tps([])
+		var ok: bool = Engine.physics_ticks_per_second == 30 and set_result.contains("30") and get_result.contains("30")
+		Engine.physics_ticks_per_second = prev
+		return ok
+	)
+
+	test("Crashtest - Registration Only", func():
+		if not registry:
+			return false
+		# Do NOT invoke _cmd_crashtest; assert(false) would halt the test runner.
+		return registry._commands.has("crashtest")
+	)
+	# --- end T5 new commands tests ---
+
 func run_autocomplete_tests():
 	print("\nTesting Autocomplete...")
 	var registry := _registry()
@@ -2411,6 +2582,123 @@ func run_editor_console_tests():
 	)
 	# --- end W1 bash polish tests ---
 
+	# --- T5 readline shortcut tests (editor) ---
+	# Bash readline parity: Ctrl+W/K/Y kill ring + Alt+B/F word nav.
+	test("Editor Console - T5 Ctrl+W Deletes Word Backward", func():
+		if not Engine.is_editor_hint():
+			return true
+		var ec := _instantiate_editor_console_fixture()
+		if not ec:
+			return false
+		ec.input_line.text = "cd res://addons/debug_console/editor"
+		ec.input_line.caret_column = ec.input_line.text.length()
+		_simulate_key_event(ec, KEY_W, true, false)
+		var text_ok: bool = ec.input_line.text == "cd res://addons/debug_console/"
+		var caret_ok: bool = ec.input_line.caret_column == 30
+		var kill_ok: bool = ec._kill_ring == "editor"
+		var action_ok: bool = ec._last_input_action == "kill_word_backward"
+		_cleanup_editor_console_fixture(ec)
+		return text_ok and caret_ok and kill_ok and action_ok
+	)
+
+	test("Editor Console - T5 Ctrl+W Skips Trailing Whitespace", func():
+		if not Engine.is_editor_hint():
+			return true
+		var ec := _instantiate_editor_console_fixture()
+		if not ec:
+			return false
+		ec.input_line.text = "   echo hello   "
+		ec.input_line.caret_column = ec.input_line.text.length()
+		_simulate_key_event(ec, KEY_W, true, false)
+		var text_ok: bool = ec.input_line.text == "   echo "
+		var caret_ok: bool = ec.input_line.caret_column == 8
+		var kill_ok: bool = ec._kill_ring == "hello   "
+		_cleanup_editor_console_fixture(ec)
+		return text_ok and caret_ok and kill_ok
+	)
+
+	test("Editor Console - T5 Ctrl+K Kills To End Of Line", func():
+		if not Engine.is_editor_hint():
+			return true
+		var ec := _instantiate_editor_console_fixture()
+		if not ec:
+			return false
+		ec.input_line.text = "echo hello world"
+		ec.input_line.caret_column = 10
+		_simulate_key_event(ec, KEY_K, true, false)
+		var text_ok: bool = ec.input_line.text == "echo hello"
+		var caret_ok: bool = ec.input_line.caret_column == 10
+		var kill_ok: bool = ec._kill_ring == " world"
+		var action_ok: bool = ec._last_input_action == "kill_to_end_of_line"
+		_cleanup_editor_console_fixture(ec)
+		return text_ok and caret_ok and kill_ok and action_ok
+	)
+
+	test("Editor Console - T5 Alt+B Walks Caret Backward Word-By-Word", func():
+		if not Engine.is_editor_hint():
+			return true
+		var ec := _instantiate_editor_console_fixture()
+		if not ec:
+			return false
+		ec.input_line.text = "echo hello world"
+		ec.input_line.caret_column = ec.input_line.text.length()
+		var stops: Array[int] = []
+		for i in range(3):
+			var ev := InputEventKey.new()
+			ev.pressed = true
+			ev.keycode = KEY_B
+			ev.physical_keycode = KEY_B
+			ev.alt_pressed = true
+			ec._on_input_line_gui_input(ev)
+			stops.append(ec.input_line.caret_column)
+		var action_ok: bool = ec._last_input_action == "word_back"
+		_cleanup_editor_console_fixture(ec)
+		return stops == [11, 5, 0] and action_ok
+	)
+
+	test("Editor Console - T5 Alt+F Walks Caret Forward Word-By-Word", func():
+		if not Engine.is_editor_hint():
+			return true
+		var ec := _instantiate_editor_console_fixture()
+		if not ec:
+			return false
+		ec.input_line.text = "echo hello world"
+		ec.input_line.caret_column = 0
+		var stops: Array[int] = []
+		for i in range(3):
+			var ev := InputEventKey.new()
+			ev.pressed = true
+			ev.keycode = KEY_F
+			ev.physical_keycode = KEY_F
+			ev.alt_pressed = true
+			ec._on_input_line_gui_input(ev)
+			stops.append(ec.input_line.caret_column)
+		var action_ok: bool = ec._last_input_action == "word_forward"
+		_cleanup_editor_console_fixture(ec)
+		return stops == [4, 10, 16] and action_ok
+	)
+
+	test("Editor Console - T5 Ctrl+Y Yanks After Kill And No-Op On Empty", func():
+		if not Engine.is_editor_hint():
+			return true
+		var ec := _instantiate_editor_console_fixture()
+		if not ec:
+			return false
+		ec.input_line.text = "echo hello"
+		ec.input_line.caret_column = ec.input_line.text.length()
+		_simulate_key_event(ec, KEY_W, true, false)
+		var after_kill_text: String = ec.input_line.text
+		_simulate_key_event(ec, KEY_Y, true, false)
+		var yank_text_ok: bool = ec.input_line.text == "echo hello"
+		var yank_caret_ok: bool = ec.input_line.caret_column == 10
+		ec._kill_ring = ""
+		_simulate_key_event(ec, KEY_Y, true, false)
+		var noop_ok: bool = ec.input_line.text == "echo hello"
+		_cleanup_editor_console_fixture(ec)
+		return after_kill_text == "echo " and yank_text_ok and yank_caret_ok and noop_ok
+	)
+	# --- end T5 readline shortcut tests (editor) ---
+
 func run_game_console_tests():
 	print("\nTesting Game Console...")
 
@@ -2911,6 +3199,125 @@ func run_game_console_tests():
 		return ok
 	)
 	# --- end W1 bash polish tests ---
+
+	# --- T5 readline shortcut tests (game) ---
+	# Runtime parity with the editor T5 suite. GameConsole carries its own
+	# independent _kill_ring slot, so these tests must not assume any
+	# state shared with the editor console.
+	test("Game Console - T5 Ctrl+W Deletes Word Backward", func():
+		if Engine.is_editor_hint():
+			return true
+		var gc := _instantiate_game_console_fixture()
+		if not gc:
+			return false
+		gc.input_line.text = "cd res://addons/debug_console/editor"
+		gc.input_line.caret_column = gc.input_line.text.length()
+		_simulate_key_event(gc, KEY_W, true, false)
+		var text_ok: bool = gc.input_line.text == "cd res://addons/debug_console/"
+		var caret_ok: bool = gc.input_line.caret_column == 30
+		var kill_ok: bool = gc._kill_ring == "editor"
+		var action_ok: bool = gc._last_input_action == "kill_word_backward"
+		_cleanup_game_console_fixture(gc)
+		return text_ok and caret_ok and kill_ok and action_ok
+	)
+
+	test("Game Console - T5 Ctrl+W Skips Trailing Whitespace", func():
+		if Engine.is_editor_hint():
+			return true
+		var gc := _instantiate_game_console_fixture()
+		if not gc:
+			return false
+		gc.input_line.text = "   echo hello   "
+		gc.input_line.caret_column = gc.input_line.text.length()
+		_simulate_key_event(gc, KEY_W, true, false)
+		var text_ok: bool = gc.input_line.text == "   echo "
+		var caret_ok: bool = gc.input_line.caret_column == 8
+		var kill_ok: bool = gc._kill_ring == "hello   "
+		_cleanup_game_console_fixture(gc)
+		return text_ok and caret_ok and kill_ok
+	)
+
+	test("Game Console - T5 Ctrl+K Kills To End Of Line", func():
+		if Engine.is_editor_hint():
+			return true
+		var gc := _instantiate_game_console_fixture()
+		if not gc:
+			return false
+		gc.input_line.text = "echo hello world"
+		gc.input_line.caret_column = 10
+		_simulate_key_event(gc, KEY_K, true, false)
+		var text_ok: bool = gc.input_line.text == "echo hello"
+		var caret_ok: bool = gc.input_line.caret_column == 10
+		var kill_ok: bool = gc._kill_ring == " world"
+		var action_ok: bool = gc._last_input_action == "kill_to_end_of_line"
+		_cleanup_game_console_fixture(gc)
+		return text_ok and caret_ok and kill_ok and action_ok
+	)
+
+	test("Game Console - T5 Alt+B Walks Caret Backward Word-By-Word", func():
+		if Engine.is_editor_hint():
+			return true
+		var gc := _instantiate_game_console_fixture()
+		if not gc:
+			return false
+		gc.input_line.text = "echo hello world"
+		gc.input_line.caret_column = gc.input_line.text.length()
+		var stops: Array[int] = []
+		for i in range(3):
+			var ev := InputEventKey.new()
+			ev.pressed = true
+			ev.keycode = KEY_B
+			ev.physical_keycode = KEY_B
+			ev.alt_pressed = true
+			gc._on_input_line_gui_input(ev)
+			stops.append(gc.input_line.caret_column)
+		var action_ok: bool = gc._last_input_action == "word_back"
+		_cleanup_game_console_fixture(gc)
+		return stops == [11, 5, 0] and action_ok
+	)
+
+	test("Game Console - T5 Alt+F Walks Caret Forward Word-By-Word", func():
+		if Engine.is_editor_hint():
+			return true
+		var gc := _instantiate_game_console_fixture()
+		if not gc:
+			return false
+		gc.input_line.text = "echo hello world"
+		gc.input_line.caret_column = 0
+		var stops: Array[int] = []
+		for i in range(3):
+			var ev := InputEventKey.new()
+			ev.pressed = true
+			ev.keycode = KEY_F
+			ev.physical_keycode = KEY_F
+			ev.alt_pressed = true
+			gc._on_input_line_gui_input(ev)
+			stops.append(gc.input_line.caret_column)
+		var action_ok: bool = gc._last_input_action == "word_forward"
+		_cleanup_game_console_fixture(gc)
+		return stops == [4, 10, 16] and action_ok
+	)
+
+	test("Game Console - T5 Ctrl+Y Yanks After Kill And No-Op On Empty", func():
+		if Engine.is_editor_hint():
+			return true
+		var gc := _instantiate_game_console_fixture()
+		if not gc:
+			return false
+		gc.input_line.text = "echo hello"
+		gc.input_line.caret_column = gc.input_line.text.length()
+		_simulate_key_event(gc, KEY_W, true, false)
+		var after_kill_text: String = gc.input_line.text
+		_simulate_key_event(gc, KEY_Y, true, false)
+		var yank_text_ok: bool = gc.input_line.text == "echo hello"
+		var yank_caret_ok: bool = gc.input_line.caret_column == 10
+		gc._kill_ring = ""
+		_simulate_key_event(gc, KEY_Y, true, false)
+		var noop_ok: bool = gc.input_line.text == "echo hello"
+		_cleanup_game_console_fixture(gc)
+		return after_kill_text == "echo " and yank_text_ok and yank_caret_ok and noop_ok
+	)
+	# --- end T5 readline shortcut tests (game) ---
 
 func run_console_manager_tests():
 	print("\nTesting Console Manager...")
