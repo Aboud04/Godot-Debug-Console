@@ -8,20 +8,26 @@
 
 config_version=5
 
+[animation]
+
+compatibility/default_parent_skeleton_in_mesh_instance_3d=true
+
 [application]
 
 config/name="Debug Console"
 config/tags=PackedStringArray("godotsystems")
 run/main_scene="res://test_scene.tscn"
 config/auto_accept_quit=false
-config/features=PackedStringArray("4.4", "Forward Plus")
+config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="uid://bx514ndiixgu1"
 
 [autoload]
 
-GameConsoleManager="*res://addons/debug_console/game/GameConsoleManager.gd"
-CommandRegistry="*res://addons/debug_console/core/CommandRegistry.gd"
-DebugCore="*res://addons/debug_console/core/DebugCore.gd"
+GameConsoleManager="*uid://dsr8e7vkd3scc"
+CommandRegistry="*uid://ce5ap1y1kwavq"
+DebugCore="*uid://ctmkncwpk2qma"
+DebugConsole="*uid://d010a0e3yyovw"
+GodotIQRuntime="*uid://doddcfisuprv3"
 
 [debug]
 
@@ -29,4 +35,4 @@ enable_game_console=true
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/debug_console/plugin.cfg")
+enabled=PackedStringArray("res://addons/debug_console/plugin.cfg", "res://addons/godot_mcp/plugin.cfg", "res://addons/godotiq/plugin.cfg")

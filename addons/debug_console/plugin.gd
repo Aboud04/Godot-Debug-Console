@@ -14,6 +14,12 @@ func _enter_tree():
 	# here first, the singletons enter the scene tree before we touch them.
 	add_autoload_singleton("DebugCore", "res://addons/debug_console/core/DebugCore.gd")
 	add_autoload_singleton("CommandRegistry", "res://addons/debug_console/core/CommandRegistry.gd")
+	# T4: Register the public DebugConsole API autoload AFTER CommandRegistry so
+	# T4: its _ready() can resolve /root/CommandRegistry on first lookup. Godot
+	# T4: instantiates autoloads in registration order, so DebugConsoleAPI._ready
+	# T4: runs strictly after CommandRegistry._ready, both here (editor) and at
+	# T4: runtime (project.godot stores them in registration order).
+	add_autoload_singleton("DebugConsole", "res://addons/debug_console/core/DebugConsoleAPI.gd")
 	add_autoload_singleton("GameConsoleManager", "res://addons/debug_console/game/GameConsoleManager.gd")
 
 	# Step 2: Wait one frame so all three autoloads can run their _ready() callbacks.
@@ -25,15 +31,55 @@ func _enter_tree():
 	var command_registry: Node = get_node("/root/CommandRegistry")
 
 	# Step 4: Instantiate the editor console UI panel.
-	editor_console_panel = load("res://addons/debug_console/editor/EditorConsole.tscn").instantiate()
+	var editor_console_scene: PackedScene = load("res://addons/debug_console/editor/EditorConsole.tscn") as PackedScene
+	if not editor_console_scene:
+		push_error("Debug Console: failed to load EditorConsole.tscn. Plugin will not activate. Check addons/debug_console/editor/ for parse errors.")
+		return
+	editor_console_panel = editor_console_scene.instantiate()
 
 	# Step 5: Tell DebugCore about the editor output panel.
 	debug_core.initialize_for_editor(editor_console_panel)
 
 	# Step 6: Create BuiltInCommands and inject its dependencies before registering.
-	builtin_commands = load("res://addons/debug_console/core/BuiltInCommands.gd").new()
+	# Use defensive load() rather than relying on class_name resolution so that a
+	# parse error in BuiltInCommands.gd or any class it references (TestFramework,
+	# etc.) produces a clear, recoverable error message instead of silently leaving
+	# the plugin in a half-initialized state.
+	var builtin_script: GDScript = load("res://addons/debug_console/core/BuiltInCommands.gd") as GDScript
+	if not builtin_script:
+		push_error("Debug Console: failed to load BuiltInCommands.gd. Plugin will not register commands. Check Output for parse errors in addons/debug_console/core/.")
+		return
+	builtin_commands = builtin_script.new()
+	if not builtin_commands:
+		push_error("Debug Console: BuiltInCommands script loaded but .new() failed. Plugin will not register commands.")
+		return
 	builtin_commands.initialize(command_registry, debug_core)
 	builtin_commands.register_editor_commands()
+
+	# Step 6b: T3.3 — wire up the persistence layer. Defensive load() pattern
+	# matches the rest of plugin.gd so a parse error in PersistenceManager.gd
+	# only disables history/cwd persistence instead of taking the whole plugin
+	# down. Persistence is OPTIONAL: every consumer is null-guarded.
+	var persistence_script: GDScript = load("res://addons/debug_console/core/PersistenceManager.gd") as GDScript
+	if persistence_script:
+		var persistence: RefCounted = persistence_script.new()
+		if persistence:
+			if builtin_commands.has_method("set_state_saver"):
+				builtin_commands.set_state_saver(persistence)
+			# Restore the working directory for THIS project, falling back
+			# silently if the stored path no longer exists (project moved,
+			# folder deleted, etc.). Both the instance field and the static
+			# mirror must be updated so consumers reading either see the
+			# same value immediately.
+			var project_path: String = ProjectSettings.globalize_path("res://")
+			var stored_cwd: String = persistence.load_cwd_for_project(project_path)
+			if not stored_cwd.is_empty() and DirAccess.dir_exists_absolute(stored_cwd):
+				builtin_commands.current_directory = stored_cwd
+				builtin_commands.set_current_directory(stored_cwd)
+			if editor_console_panel and editor_console_panel.has_method("set_persistence"):
+				editor_console_panel.set_persistence(persistence)
+	else:
+		push_warning("Debug Console: failed to load PersistenceManager.gd. History and working-directory persistence are disabled.")
 
 	# Step 7: Add the UI and keyboard shortcut.
 	_add_toggle_shortcut()
@@ -65,6 +111,10 @@ func _exit_tree():
 
 	# Remove autoloads in reverse registration order so dependencies are torn down safely.
 	remove_autoload_singleton("GameConsoleManager")
+	# T4: Remove DebugConsole BEFORE CommandRegistry — the API holds a signal
+	# T4: connection on the registry and reads from it lazily, so the registry
+	# T4: must outlive it during teardown.
+	remove_autoload_singleton("DebugConsole")
 	remove_autoload_singleton("CommandRegistry")
 	remove_autoload_singleton("DebugCore")
 
