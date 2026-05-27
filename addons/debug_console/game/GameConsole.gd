@@ -9,12 +9,12 @@ const LOG_LEVEL_SUCCESS := 3
 
 # Meta key for the log line buffer. We mirror every logged line into Node
 # metadata so tests (and future overlay widgets) can inspect what was logged
-# without depending on RichTextLabel's render state — which in headless
+# without depending on RichTextLabel's render state - which in headless
 # run_scene contexts may not reflect appended content immediately. Same
 # pattern as EditorConsole; survives @tool script reloads.
 const _META_LOG_BUFFER := "debug_console_log_buffer"
 
-# T2.3 — opacity and resize bounds. Floor on opacity keeps the console at
+# T2.3 - opacity and resize bounds. Floor on opacity keeps the console at
 # least faintly visible so a stray scroll can't make it invisible. Min
 # height keeps the input line reachable; max is computed against the live
 # viewport at apply time (80% of viewport height).
@@ -56,7 +56,7 @@ var _in_logger_callback: bool = false
 var _logger_instance: Object = null
 var _logger_unavailable: bool = false
 
-# T2.1 popup-driven autocomplete state. Ephemeral session fields — see the
+# T2.1 popup-driven autocomplete state. Ephemeral session fields - see the
 # matching block in EditorConsole.gd for rationale.
 var _matching_commands: Array[String] = []
 var _user_draft: String = ""
@@ -141,7 +141,7 @@ func _setup_ui():
 	output_text.add_theme_font_size_override("normal_font_size", 14)
 	
 	input_line.placeholder_text = "Enter command... (F12 to close)"
-	# W1: blinking caret so the input always feels "alive" — Godot defaults
+	# W1: blinking caret so the input always feels "alive" - Godot defaults
 	# to no blink on LineEdit which makes the cursor easy to lose.
 	input_line.caret_blink = true
 	input_line.caret_blink_interval = 0.5
@@ -170,7 +170,7 @@ func _input(event):
 	if event is InputEventKey and event.pressed:
 		# ESC: when the autocomplete popup is open, gui_input handles dismissal
 		# and we must not also close the console. F12 and Ctrl+` always close
-		# regardless of popup state — those are dedicated console toggles, not
+		# regardless of popup state - those are dedicated console toggles, not
 		# popup escape.
 		# W1: while a Ctrl+R reverse search is active, Esc cancels the search
 		# (handled in _on_input_line_gui_input). It must NOT also close the
@@ -274,7 +274,7 @@ func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 		return
 	var color = _get_level_color(level)
 	# T2.2: per-token category colorization. GameConsole intentionally skips
-	# the [url=...] click-wrap that EditorConsole applies — runtime overlays
+	# the [url=...] click-wrap that EditorConsole applies - runtime overlays
 	# can't call EditorInterface, and a styled-but-inert link would mislead
 	# end users. Paths still get the cyan color treatment.
 	var decorated: String = _colorize_message(message)
@@ -477,7 +477,7 @@ func _navigate_history(direction: int):
 # Until T3.2, GameConsole supported only "commands" mode. T3.2 added
 # "node_paths" so commands like `inspect` / `get` / `set` can suggest live
 # scene-tree paths at runtime. Other editor-only modes (files, directories,
-# node_types) intentionally aren't mirrored — there's no filesystem-editing
+# node_types) intentionally aren't mirrored - there's no filesystem-editing
 # story at runtime.
 
 func _on_input_line_gui_input(event: InputEvent) -> void:
@@ -653,7 +653,7 @@ func _show_autocomplete_popup() -> void:
 	_position_autocomplete_popup()
 
 func _refresh_command_matches() -> void:
-	# T3.2 — dispatch by mode. The runtime console supports two modes:
+	# T3.2 - dispatch by mode. The runtime console supports two modes:
 	# "commands" (the legacy default) and "node_paths" (for inspect, get,
 	# set, watch, scene_tree, signals, properties). Editor-only modes
 	# (files, directories, filenames_only, node_types) make no sense at
@@ -678,9 +678,9 @@ func _refresh_command_matches() -> void:
 	if _matching_commands.size() > _MAX_POPUP_ITEMS:
 		_matching_commands = _matching_commands.slice(0, _MAX_POPUP_ITEMS)
 
-# T3.2 — commands whose first arg is a live node path. PUNT: per-target
+# T3.2 - commands whose first arg is a live node path. PUNT: per-target
 # property completion for `get <target>.<property>` is intentionally not
-# implemented — see EditorConsole._determine_autocomplete_mode for the
+# implemented - see EditorConsole._determine_autocomplete_mode for the
 # same note. We always suggest node paths for the first arg.
 const _NODE_PATH_ARG_COMMANDS := [
 	"inspect", "get", "set", "watch", "scene_tree", "signals", "properties"
@@ -716,10 +716,10 @@ func _get_command_suggestions(current_word: String) -> void:
 	_matching_commands = matches
 
 func _get_node_path_suggestions(current_word: String) -> void:
-	# T3.2 — runtime parity with EditorConsole._get_node_path_suggestions.
+	# T3.2 - runtime parity with EditorConsole._get_node_path_suggestions.
 	# We merge three sources:
-	#   1) "Engine" — global singleton (always offered, prefix-filtered)
-	#   2) Direct children of /root — autoload short names + the current
+	#   1) "Engine" - global singleton (always offered, prefix-filtered)
+	#   2) Direct children of /root - autoload short names + the current
 	#      scene's top node. Addressable by short name.
 	#   3) Descendants of /root as absolute /root/... paths, capped at
 	#      depth 4 so an instanced UI scene can't balloon the popup.
@@ -913,7 +913,7 @@ func _show_welcome_banner() -> void:
 
 # Build the colored prompt prefix `[player@runtime cwd]$ ` followed by the
 # per-token colored command. BuiltInCommands.get_current_directory is a
-# static method on a class_name RefCounted — it's safe to reference at
+# static method on a class_name RefCounted - it's safe to reference at
 # runtime (no autoload dependency).
 func _format_bash_prompt(command: String) -> String:
 	# BuiltInCommands is a `class_name extends RefCounted` static helper
@@ -978,7 +978,7 @@ func _is_quoted_string(token: String) -> bool:
 
 # Minimal shell-like tokenizer: splits on spaces but keeps quoted strings
 # (single or double) together and treats `|` as its own token. Sufficient
-# for the highlighting needs — we do NOT try to be a complete shell parser
+# for the highlighting needs - we do NOT try to be a complete shell parser
 # (no escapes, no $vars, no redirects). The actual command execution still
 # happens via CommandRegistry.execute_command(command) on the raw string.
 func _tokenize_command(command: String) -> Array:
@@ -1288,7 +1288,7 @@ func _clamp_height(h: float) -> float:
 	if vp:
 		vp_h = vp.get_visible_rect().size.y
 	# If the viewport reports a non-meaningful size (early _ready, headless
-	# test fixture, not-yet-sized window), don't clamp aggressively — just
+	# test fixture, not-yet-sized window), don't clamp aggressively - just
 	# enforce the minimum. The drag handle re-clamps against the live
 	# viewport when the user actually resizes, so a stale max here only
 	# matters until the first drag.
@@ -1299,7 +1299,7 @@ func _clamp_height(h: float) -> float:
 
 # Reads opacity + height from user://debug_console_config.cfg and applies
 # them. Called once during _ready(). Failure modes (missing file, missing
-# section, missing key) all silently fall through to defaults — this is
+# section, missing key) all silently fall through to defaults - this is
 # a UX preference store, not a critical path.
 func _apply_persisted_config() -> void:
 	var cfg: ConfigFile = ConfigFile.new()
@@ -1310,7 +1310,7 @@ func _apply_persisted_config() -> void:
 	if cfg.has_section_key(_CONSOLE_CONFIG_SECTION, "opacity"):
 		var raw_op: Variant = cfg.get_value(_CONSOLE_CONFIG_SECTION, "opacity", 0.85)
 		var op_f: float = float(raw_op)
-		# Accept either 0.0..1.0 or 0..100 — the `opacity` command accepts
+		# Accept either 0.0..1.0 or 0..100 - the `opacity` command accepts
 		# both formats too, and we normalize for backward compat.
 		if op_f > 1.0:
 			op_f = op_f / 100.0

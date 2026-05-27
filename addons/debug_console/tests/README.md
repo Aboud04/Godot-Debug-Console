@@ -7,13 +7,25 @@ This guide covers the comprehensive test suite for the Debug Console addon, incl
 ### Running Tests
 ```bash
 # In editor or game console
-test                    # Run complete test suite
+test                    # Run complete test suite (247 tests as of v1.2.0)
 test_commands          # Test command system only
 test_autocomplete      # Test autocomplete only
 test_files             # Test file operations only
 test_pipes             # Test command piping only
 quick_test             # Run basic functionality tests
 ```
+
+### File-Based Runner (canonical for CI / headless verification)
+
+The repo ships a non-interactive test pipeline at the project root:
+
+| File | Purpose |
+|---|---|
+| `res://.dc_test_runner.tscn` | Headless scene - load it as the main scene (or `godot --headless res://.dc_test_runner.tscn`) and it auto-runs `TestFramework.gd` |
+| `res://.dc_test_runner.gd` | Runner script that drives the suite and writes results to disk |
+| `res://.dc_test_results.json` | JSON output of the most recent run: `{"passed": N, "total": M, "ok": bool, ...}` |
+
+This is the **canonical pipeline** for verifying the suite - the MCP `get_console_log` route is unreliable across multiple runs, so prefer reading `.dc_test_results.json` in any automation. **Do not modify `.dc_test_runner.tscn` or `.dc_test_runner.gd` unless your task is specifically about the test pipeline.**
 
 ### Programmatic Testing
 ```gdscript
@@ -34,14 +46,29 @@ Tests the core command system:
 
 ### 2. Built-in Commands Tests
 Tests all individual commands:
-- **Universal**: `help`, `echo`, `history`, `clear_history`
-- **Editor**: `ls`, `cd`, `pwd`, `cat`, `grep`, `head`, `tail`, `find`, `stat`
-- **File Operations**: `mkdir`, `touch`, `rm`, `rmdir`, `cp`, `mv`
-- **Content Creation**: `new_script`, `new_scene`, `new_resource`
-- **Project Control**: `save_scenes`, `run_project`, `stop_project`
-- **Game**: `fps`, `nodes`, `pause`, `timescale`
+- **Universal**: `help`, `echo`, `history`, `clear_history`, `clear`, `alias`/`unalias`, `test`, `inspect`, `get`/`set`, `watch`, `signals`, `properties`, `scene_tree`, `save_log`, `benchmark`, `config`, `json`
+- **Editor file ops**: `ls`, `cd`, `pwd`, `cat`, `grep`, `head`, `tail`, `find`, `stat`, `tree`, `wc`, `diff`
+- **File mutations**: `mkdir`, `touch`, `rm`, `rmdir`, `cp`, `mv`
+- **Content creation**: `new_script`, `new_scene`, `new_resource`, `open`, `node_types`
+- **Project control**: `save_scenes`, `run_project`, `stop_project`, `refresh`, `reload`, `reload_scripts`, `scene`
+- **Game**: `fps`, `nodes`, `pause`, `timescale`, `opacity`, `intercept`
+- **Regression coverage**: dedicated `Regression - B1`/`B2`/`B3`/`B4` cases (cwd-clamp, Esc close, BBCode + autoload focus, new_scene UID collision)
 
-### 3. Command Piping Tests
+### 3. Persistence Tests (Tier 3 + Wave 1)
+Tests history and cwd persistence to `user://`:
+- History cap at 500, consecutive-duplicate dedup
+- Per-project cwd isolation (different projects keep independent state)
+- Graceful recovery on corrupted JSON (PersistenceManager logs `Parse JSON failed` as a SUCCESS signal - see Troubleshooting)
+- Survives editor restarts and plugin enable/disable cycles
+
+### 4. Plugin Author API Tests (Tier 4)
+Tests the public `/root/DebugConsole` surface:
+- `register_command()`, `register_console_command()`, `unregister_command()` round-trips
+- `ConsoleCommand` resource declarative path (note: `callable_target` is NOT `@export`ed because Godot refuses to serialize Object/Node refs on Resource - it must be assigned in code after the resource is loaded)
+- Signal emission: `command_registered`, `command_unregistered`, `command_executed`, `console_opened`, `console_closed`
+- Backward-compatibility surface - methods may grow params (with defaults) but never reduce or reshape (REQ-6.2)
+
+### 5. Command Piping Tests
 Tests command chaining functionality:
 - Simple command chains (`echo | echo`)
 - Multiple pipe sequences (`ls | grep .gd | head 5`)
@@ -49,7 +76,7 @@ Tests command chaining functionality:
 - Error handling in pipe chains
 - Whitespace and edge case handling
 
-### 4. Autocomplete Tests
+### 6. Autocomplete Tests
 Tests the smart suggestion system:
 - Command suggestions
 - File and directory suggestions
@@ -57,7 +84,7 @@ Tests the smart suggestion system:
 - Mode detection
 - Cycling through options
 
-### 5. UI Component Tests
+### 7. UI Component Tests
 Tests console interfaces:
 - Editor console initialization and functionality
 - Game console visibility and animation
@@ -65,14 +92,14 @@ Tests console interfaces:
 - Input handling and focus management
 - Log message formatting
 
-### 6. Debug Core Tests
+### 8. Debug Core Tests
 Tests core logging system:
 - Log level handling
 - Message history management
 - Message formatting
 - History size limits
 
-### 7. Performance Tests
+### 9. Performance Tests
 Tests system performance:
 - Command registration speed
 - Command execution performance
@@ -80,7 +107,7 @@ Tests system performance:
 - Large file handling
 - UI responsiveness
 
-### 8. Error Handling Tests
+### 10. Error Handling Tests
 Tests error scenarios:
 - Invalid command handling
 - Malformed piping
@@ -88,7 +115,7 @@ Tests error scenarios:
 - Memory leak prevention
 - Instance cleanup
 
-### 9. Integration Tests
+### 11. Integration Tests
 Tests system-wide functionality:
 - Cross-component communication
 - Full command chains
@@ -97,10 +124,11 @@ Tests system-wide functionality:
 ## Test Results
 
 ### Success Criteria
-- **100% pass rate** expected for all test suites
-- **Context awareness** - Tests run only in appropriate contexts
-- **Performance** - Tests complete within reasonable time limits
-- **Cleanup** - No test artifacts left behind
+- **100% pass rate** expected for all test suites (currently **247/247** as of v1.2.0)
+- **Context awareness** - tests run only in appropriate contexts
+- **Performance** - tests complete within reasonable time limits
+- **Cleanup** - no test artifacts left behind
+- **No auto-PASS heuristics** - the test framework's `_execute_test_safely` no longer accepts non-bool returns as success; tests must explicitly return `bool` (REQ-6.5)
 
 ### Example Output
 ```
@@ -115,13 +143,13 @@ Testing Command Registry...
 =====================================
 TEST RESULTS SUMMARY
 =====================================
-Total Tests: 108
-Passed: 108
+Total Tests: 247
+Passed: 247
 Failed: 0
 Success Rate: 100.0%
-Total Time: 1250ms
+Total Time: 1850ms
 
-All tests passed! The Debug Console is working perfectly.
+All 247 tests passed! The Debug Console is working perfectly.
 =====================================
 ```
 
@@ -212,6 +240,16 @@ test("Performance Test", func():
 
 ### Common Issues
 
+#### Harmless Warnings During a Successful Run
+Two warnings appear in the editor Output panel during a green run. **Both are intentional and indicate tests are working correctly:**
+
+| Warning | Source | Why it's harmless |
+|---|---|---|
+| `PersistenceManager.gd:37 Parse JSON failed` | Persistence Tests - corrupted-file recovery case | The test deliberately writes garbage to `user://debug_console_history.json` to verify graceful recovery. The warning IS the success signal - if it disappears, the recovery test isn't actually exercising the bad path |
+| `GameConsole.gd:183 Nodes with non-equal opposite anchors` | UI Component Tests - resize-clamp case | Benign Godot 4.x warning that fires while the console panel is being resized below its natural minimum size during clamp testing. Cosmetic only |
+
+If you see OTHER warnings or errors in the Output during a `test` run, treat them as real and investigate.
+
 #### Test Failures in Game Mode
 Some tests are editor-only and will be skipped in game mode. This is expected behavior.
 
@@ -244,7 +282,7 @@ test("Debug Test", func():
 
 ## Continuous Integration
 
-The test suite is designed for CI/CD integration:
+The test suite is designed for CI/CD integration via the file-based runner.
 
 ### GitHub Actions Example
 ```yaml
@@ -257,8 +295,13 @@ jobs:
       - uses: actions/checkout@v3
       - name: Setup Godot
         uses: godotengine/godot-ci-action@v1
-      - name: Run Tests
-        run: godot --headless --script addons/debug_console/tests/TestFramework.gd
+      - name: Run Tests (file-based runner)
+        run: |
+          godot --headless --path . res://.dc_test_runner.tscn
+          # Runner writes results to res://.dc_test_results.json
+      - name: Check results
+        run: |
+          jq -e '.ok == true and .passed == .total' .dc_test_results.json
 ```
 
 ### Pre-commit Hooks
@@ -266,12 +309,15 @@ jobs:
 #!/bin/bash
 # .git/hooks/pre-commit
 echo "Running Debug Console tests..."
-godot --headless --script addons/debug_console/tests/TestFramework.gd
-if [ $? -ne 0 ]; then
+godot --headless --path . res://.dc_test_runner.tscn
+if ! jq -e '.ok == true' .dc_test_results.json > /dev/null; then
     echo "Tests failed! Commit aborted."
+    cat .dc_test_results.json
     exit 1
 fi
 ```
+
+> **Note:** The MCP `get_console_log` route is unreliable across multiple runs. Always read `.dc_test_results.json` in CI/automation; treat the console transcript as informational only.
 
 ## Test Coverage
 

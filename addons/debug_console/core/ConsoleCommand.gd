@@ -33,7 +33,7 @@ class_name ConsoleCommand extends Resource
 
 ## The command word as typed in the console (lowercase, no spaces, no leading
 ## or trailing whitespace). This is also the key under which the command is
-## stored in the registry — registering a name that already exists will fail.
+## stored in the registry - registering a name that already exists will fail.
 @export var command_name: String = ""
 
 ## Human-readable description shown in the `help` command output. Keep it to
@@ -48,7 +48,7 @@ class_name ConsoleCommand extends Resource
 @export var context: String = "both"
 
 ## The object whose method will be called when this command is executed.
-## Must remain valid for the lifetime of the registration — if this object
+## Must remain valid for the lifetime of the registration - if this object
 ## is freed, the command will silently fail with an "object was destroyed"
 ## error message. Plugin authors should unregister the command in their
 ## `_exit_tree` / cleanup paths to avoid this.

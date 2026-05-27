@@ -25,7 +25,7 @@ func _enter_tree():
 	# Step 2: Wait one frame so all three autoloads can run their _ready() callbacks.
 	await get_tree().process_frame
 
-	# Step 3: Fetch typed node references — never use bare global identifiers in @tool
+	# Step 3: Fetch typed node references - never use bare global identifiers in @tool
 	# scripts, because those identifiers are resolved at parse time, not run time.
 	var debug_core: Node = get_node("/root/DebugCore")
 	var command_registry: Node = get_node("/root/CommandRegistry")
@@ -56,7 +56,7 @@ func _enter_tree():
 	builtin_commands.initialize(command_registry, debug_core)
 	builtin_commands.register_editor_commands()
 
-	# Step 6b: T3.3 — wire up the persistence layer. Defensive load() pattern
+	# Step 6b: T3.3 - wire up the persistence layer. Defensive load() pattern
 	# matches the rest of plugin.gd so a parse error in PersistenceManager.gd
 	# only disables history/cwd persistence instead of taking the whole plugin
 	# down. Persistence is OPTIONAL: every consumer is null-guarded.
@@ -111,7 +111,7 @@ func _exit_tree():
 
 	# Remove autoloads in reverse registration order so dependencies are torn down safely.
 	remove_autoload_singleton("GameConsoleManager")
-	# T4: Remove DebugConsole BEFORE CommandRegistry — the API holds a signal
+	# T4: Remove DebugConsole BEFORE CommandRegistry - the API holds a signal
 	# T4: connection on the registry and reads from it lazily, so the registry
 	# T4: must outlive it during teardown.
 	remove_autoload_singleton("DebugConsole")

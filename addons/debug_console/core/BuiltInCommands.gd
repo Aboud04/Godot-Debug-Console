@@ -8,13 +8,13 @@ var _aliases: Dictionary = {}
 var _registered_alias_names: Array[String] = []
 var _active_alias_calls: Array[String] = []
 
-# T3.3 — optional persistence hook injected by plugin.gd. When non-null its
+# T3.3 - optional persistence hook injected by plugin.gd. When non-null its
 # save_cwd(String) method is called after every successful `cd` so the working
 # directory survives editor restarts. Tests that don't care about persistence
 # leave this null and _change_directory behaves exactly as before.
 var _state_saver: Object = null
 
-# T2.3 — toggled by the `intercept on|off` command. Defaults OFF so the
+# T2.3 - toggled by the `intercept on|off` command. Defaults OFF so the
 # GameConsole never accidentally double-logs its own output (which would
 # recurse infinitely once a usable logger hook is wired).
 var _intercept_active: bool = false
@@ -33,7 +33,7 @@ func initialize(registry: Node, core: Node) -> void:
 	_registry = registry
 	_core = core
 
-# T3.3 — injection point for the persistence layer. Kept as a separate setter
+# T3.3 - injection point for the persistence layer. Kept as a separate setter
 # (not a parameter of initialize) so other call sites that just need
 # command registration aren't forced to know about persistence.
 func set_state_saver(saver: Object) -> void:
@@ -77,7 +77,7 @@ func register_editor_commands():
 	_registry.register_command("head", _head, "Show first N lines of input or file", "editor", true)
 	_registry.register_command("tail", _tail, "Show last N lines of input or file", "editor", true)
 
-	# T3.1 — filesystem and developer convenience commands
+	# T3.1 - filesystem and developer convenience commands
 	_registry.register_command("tree", _cmd_tree, "Visualize the filesystem tree under the current directory", "editor")
 	_registry.register_command("wc", _cmd_wc, "Count lines, words, and characters in a file or piped input", "editor", true)
 	_registry.register_command("reload_scripts", _cmd_reload_scripts, "Force-reload every GDScript file in the project", "editor")
@@ -132,10 +132,10 @@ func register_universal_commands():
 	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
 	_registry.register_command("benchmark", _cmd_benchmark, "Benchmark a command: benchmark [iterations] <command>", "both")
 	_registry.register_command("config", _cmd_config, "Manage persistent console settings", "both")
-	# T3.1 — live introspection commands (work in both editor and runtime)
+	# T3.1 - live introspection commands (work in both editor and runtime)
 	_registry.register_command("signals", _cmd_signals, "List signals defined on a live node, with connection counts", "both")
 	_registry.register_command("properties", _cmd_properties, "List property names and types on a live target (no values)", "both")
-	# W1 — pretty-print arbitrary JSON. Pipe-aware so `echo '...' | json` works.
+	# W1 - pretty-print arbitrary JSON. Pipe-aware so `echo '...' | json` works.
 	_registry.register_command("json", _cmd_json, "Pretty-print JSON: json <text> (also pipe-able)", "both", true)
 	_load_aliases_from_config()
 	_register_alias_commands()
@@ -641,7 +641,7 @@ func _list_files(args: Array, input: String = "", is_pipe_context: bool = false)
 	
 	# Capture is_dir per-entry DURING iteration. The pre-T2.2 code called
 	# dir.current_is_dir() AFTER list_dir_end(), which returns whatever the
-	# iterator's final state was — effectively meaningless. We snapshot
+	# iterator's final state was - effectively meaningless. We snapshot
 	# correctly here so both the short and long formats can rely on it.
 	var entries: Array = []
 	dir.list_dir_begin()
@@ -1602,7 +1602,7 @@ func _save_log(args: Array) -> String:
 # a parse error in TestFramework.gd (likely during active test development)
 # does NOT cascade into BuiltInCommands.gd / plugin.gd at parse time and
 # silently take down the entire Debug Console. With this pattern, a broken
-# TestFramework only breaks the `test` command itself — the rest of the
+# TestFramework only breaks the `test` command itself - the rest of the
 # console keeps working and you get a clear, recoverable error message.
 func _new_test_framework():
 	var script: GDScript = load("res://addons/debug_console/tests/TestFramework.gd")
@@ -1704,7 +1704,7 @@ func _set_time_scale(args: Array) -> String:
 	Engine.time_scale = scale
 	return "Time scale set to: %.2f" % scale
 
-# T2.3 — set GameConsole background opacity. Accepts 0-100 (percent) or
+# T2.3 - set GameConsole background opacity. Accepts 0-100 (percent) or
 # 0.0-1.0 (raw alpha). The actual visual update + clamp-to-floor lives on
 # GameConsole.set_opacity(); we just route + persist. When no GameConsole
 # is reachable (e.g., called from a test fixture before the manager has
@@ -1721,7 +1721,7 @@ func _cmd_opacity(args: Array) -> String:
 	if not raw.is_valid_float():
 		return "Error: opacity expects a number between 0 and 100 (or 0.0 and 1.0), got: %s" % raw
 	var raw_f: float = raw.to_float()
-	# Accept both "50" and "0.5" — anything > 1.0 is treated as percent.
+	# Accept both "50" and "0.5" - anything > 1.0 is treated as percent.
 	var value: float = raw_f
 	if value > 1.0:
 		value = value / 100.0
@@ -1739,7 +1739,7 @@ func _cmd_opacity(args: Array) -> String:
 	_save_console_config_values(values)
 	return "Opacity set to %d%% (%.2f)" % [int(round(applied * 100.0)), applied]
 
-# T2.3 — toggle global print interception. Uses Godot 4.5+ Logger API
+# T2.3 - toggle global print interception. Uses Godot 4.5+ Logger API
 # via GameConsoleLogger.gd; falls back to a no-op with an explanatory
 # message on older engines (see GameConsole.set_intercept_enabled).
 func _cmd_intercept(args: Array) -> String:
@@ -1759,7 +1759,7 @@ func _cmd_intercept(args: Array) -> String:
 			if not ok:
 				_intercept_active = false
 				return "Intercept unavailable: GameConsole could not attach a logger on this engine"
-			return "Intercept ON — global print/push_warning/push_error routed to console"
+			return "Intercept ON - global print/push_warning/push_error routed to console"
 		"off":
 			_intercept_active = false
 			if gc and gc.has_method("set_intercept_enabled"):
@@ -1831,7 +1831,7 @@ func _build_tree_lines(node: Node, prefix: String, is_last: bool, output: Array[
 
 #region T3.1 New commands
 
-# tree [depth] — visualize the filesystem under current_directory using the
+# tree [depth] - visualize the filesystem under current_directory using the
 # same glyphs as _cmd_scene_tree. Hidden entries (begin with ".") are skipped.
 # Default depth = 3, hard-capped at 10 to prevent runaway recursion on deep
 # trees. Output is newline-joined so it pipes cleanly into wc / grep / head.
@@ -1879,7 +1879,7 @@ func _build_fs_tree_lines(path: String, prefix: String, output: Array[String], m
 			var next_prefix: String = prefix + ("   " if is_last else "│  ")
 			_build_fs_tree_lines(path.path_join(item_name), next_prefix, output, max_depth, current_depth + 1)
 
-# wc <file> — bash-style line/word/char count. Counts piped input when
+# wc <file> - bash-style line/word/char count. Counts piped input when
 # is_pipe_context is true and input is non-empty (e.g. `cat foo | wc`),
 # otherwise opens args[0] under current_directory. Lines = number of
 # \n-delimited segments. Words = whitespace-separated non-empty tokens.
@@ -1916,7 +1916,7 @@ func _cmd_wc(args: Array, input: String = "", is_pipe_context: bool = false) -> 
 		return "%5d %5d %5d" % [line_count, word_count, char_count]
 	return "%5d %5d %5d %s" % [line_count, word_count, char_count, label]
 
-# signals <node_path> — list signal definitions on a live target with current
+# signals <node_path> - list signal definitions on a live target with current
 # connection counts. Reuses _core._resolve_inspect_target so the same path
 # patterns supported by `inspect` work here (Engine, autoload shortnames,
 # absolute /root/... paths, recursive child names).
@@ -1942,7 +1942,7 @@ func _cmd_signals(args: Array) -> String:
 	var suffix: String = "" if signal_list.size() == 1 else "s"
 
 	var lines: Array[String] = []
-	lines.append("%s [%s] — %d signal%s" % [display_path, class_str, signal_list.size(), suffix])
+	lines.append("%s [%s] - %d signal%s" % [display_path, class_str, signal_list.size(), suffix])
 	for sig in signal_list:
 		var sig_name: String = str(sig.get("name", ""))
 		var arg_list: Array = sig.get("args", [])
@@ -1954,10 +1954,10 @@ func _cmd_signals(args: Array) -> String:
 		var connections: int = 0
 		if target.has_signal(sig_name):
 			connections = target.get_signal_connection_list(sig_name).size()
-		lines.append("  %s(%s) — %d connection(s)" % [sig_name, ", ".join(arg_strs), connections])
+		lines.append("  %s(%s) - %d connection(s)" % [sig_name, ", ".join(arg_strs), connections])
 	return "\n".join(lines)
 
-# properties <node_path> — filtered view of `inspect`: names + types only,
+# properties <node_path> - filtered view of `inspect`: names + types only,
 # no values. Useful for discovering what `set <target>.<prop>` accepts.
 # Filter mirrors DebugCore._collect_properties so the output stays in sync
 # with what `inspect` shows.
@@ -1992,12 +1992,12 @@ func _cmd_properties(args: Array) -> String:
 		collected.append({"name": pname, "type": int(p.get("type", TYPE_NIL))})
 
 	var lines: Array[String] = []
-	lines.append("%s [%s] — %d property/properties" % [display_path, class_str, collected.size()])
+	lines.append("%s [%s] - %d property/properties" % [display_path, class_str, collected.size()])
 	for prop in collected:
 		lines.append("  [%-8s] %s" % [_inspect_type_name(int(prop["type"])), str(prop["name"])])
 	return "\n".join(lines)
 
-# reload_scripts — walk res:// and force-reload every .gd file via
+# reload_scripts - walk res:// and force-reload every .gd file via
 # ResourceLoader with CACHE_MODE_REPLACE. Skips third-party addon trees
 # (godot_mcp, godotiq) and the engine cache (.godot) for safety.
 func _cmd_reload_scripts(args: Array) -> String:
@@ -2035,7 +2035,7 @@ func _collect_and_reload_scripts(path: String, reloaded_counter: Array[int], fai
 		entry_name = dir.get_next()
 	dir.list_dir_end()
 
-# diff <file_a> <file_b> — naive line-level diff (no Myers/LCS), with BBCode
+# diff <file_a> <file_b> - naive line-level diff (no Myers/LCS), with BBCode
 # coloring: red for removed (file A), green for added (file B). Walks both
 # files pair-wise up to max(len_a, len_b). Lines that match are emitted
 # verbatim with a two-space prefix.
@@ -2091,12 +2091,12 @@ func _resolve_diff_path(p: String) -> String:
 
 #endregion
 
-#region W1 — Output renderer helpers
+#region W1 - Output renderer helpers
 # Wave 1 output-renderer polish: a self-contained per-token colorizer plus
 # a `json` pretty-printer and a numeric duration formatter. The colorizer is
 # intentionally a near-mirror of the EditorConsole/GameConsole `_colorize_message`
 # but extended with four NEW token categories (strings, brackets, booleans,
-# null, keywords). Both consoles still own their own copies — this version
+# null, keywords). Both consoles still own their own copies - this version
 # exists so the tests can exercise the extended pipeline without dragging in
 # Control/Tree fixtures.
 #
@@ -2113,7 +2113,7 @@ func _resolve_diff_path(p: String) -> String:
 #   3. Quoted strings        → claims interior so numbers/brackets/keywords
 #                                inside a string stay green, not yellow/pink
 #   4. Brackets {}[]()       → single chars, NO skip claim (collide with
-#                                nothing — every other detector matches
+#                                nothing - every other detector matches
 #                                multi-char letter-or-digit runs)
 #   5. Numbers (existing)    → respects skip_ranges, no skip claim
 #   6. Booleans true/false   → word-bounded, claims skip
@@ -2161,10 +2161,10 @@ func _cmd_json(args: Array, input: String = "", is_pipe_context: bool = false) -
 		return "Error: invalid JSON"
 	return JSON.stringify(parser.data, "  ")
 
-# Public test entry point. Self-contained — does not depend on _registry,
+# Public test entry point. Self-contained - does not depend on _registry,
 # _core, or any node tree. Safe to call from `BuiltInCommands.new()`.
 func _colorize_message(message: String) -> String:
-	# Pre-colored caller — early-return so we never layer a second category
+	# Pre-colored caller - early-return so we never layer a second category
 	# color on top of the caller's choice. This also prevents accidentally
 	# matching hex digits inside an existing [color=#...] tag as numbers.
 	if message.contains("[color="):
@@ -2230,7 +2230,7 @@ func _dc_detect_paths(message: String, edits: Array, skip_ranges: Array) -> void
 		var end_pos: int = i + matched_prefix.length()
 		while end_pos < n and _dc_is_path_char(message[end_pos]):
 			end_pos += 1
-		# Bail if we didn't capture at least one trailing char — bare `res://`
+		# Bail if we didn't capture at least one trailing char - bare `res://`
 		# is technically syntax but not a useful link.
 		if end_pos == i + matched_prefix.length():
 			i = end_pos
@@ -2242,7 +2242,7 @@ func _dc_detect_paths(message: String, edits: Array, skip_ranges: Array) -> void
 
 # Walks the message and wraps the next matching `"..."` or `'...'` pair in
 # string color. The whole span (including the surrounding quotes) is added to
-# skip_ranges so later detectors leave the interior alone — keeps numbers,
+# skip_ranges so later detectors leave the interior alone - keeps numbers,
 # brackets, and keywords inside a string from being colored separately.
 func _dc_detect_strings(message: String, edits: Array, skip_ranges: Array) -> void:
 	var n: int = message.length()
@@ -2258,7 +2258,7 @@ func _dc_detect_strings(message: String, edits: Array, skip_ranges: Array) -> vo
 		var close: int = i + 1
 		while close < n and message[close] != c:
 			close += 1
-		# Unmatched opening quote — bail and keep scanning.
+		# Unmatched opening quote - bail and keep scanning.
 		if close >= n:
 			i += 1
 			continue
@@ -2311,7 +2311,7 @@ func _dc_detect_numbers(message: String, edits: Array, skip_ranges: Array) -> vo
 		if best_unit_len > 0:
 			unit_end = i + best_unit_len
 		if unit_end < n and _dc_is_word_char(message[unit_end]):
-			# Trailing word char like `42abc` — reject the whole token to
+			# Trailing word char like `42abc` - reject the whole token to
 			# avoid visually splitting an identifier.
 			i = unit_end
 			while i < n and _dc_is_word_char(message[i]):
@@ -2390,7 +2390,7 @@ func _dc_is_in_skip_range(idx: int, ranges: Array) -> bool:
 	return false
 
 # Human-readable millisecond duration. Helper for benchmark/timer output;
-# not wired into existing callers yet — kept available for future commands
+# not wired into existing callers yet - kept available for future commands
 # that want consistent formatting.
 #   0..999       → "Nms"
 #   1000..59999  → "X.Ys"

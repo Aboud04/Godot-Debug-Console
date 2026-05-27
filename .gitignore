@@ -30,3 +30,6 @@ mono_crash.*.json
 
 # Rogue subagent artifact
 .w1_tests.py
+# Tooling plugins (not part of this addon's distribution)
+addons/godot_mcp/
+addons/godotiq/

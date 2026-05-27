@@ -37,28 +37,39 @@ Thank you for your interest in contributing to the Debug Console addon! This doc
 1. **Open** the project in Godot 4.x
 2. **Enable** the Debug Console plugin in Project Settings → Plugins
 3. **Test** the existing functionality: Open console and run `test`
-4. **Verify** all tests pass (100% success rate expected)
+4. **Verify** all tests pass - **247/247 expected** as of v1.2.0 (or run the file-based runner; see below)
 
 ### Project Structure
 ```
 addons/debug_console/
-├── core/           # Core functionality (commands, registry)
-│   ├── CommandRegistry.gd    # Command registration and execution
-│   ├── BuiltInCommands.gd    # Built-in command implementations
-│   └── DebugCore.gd          # Core logging and initialization
+├── core/           # Core functionality (commands, registry, persistence, public API)
+│   ├── DebugCore.gd           # Autoload - logging, output dispatch, history
+│   ├── CommandRegistry.gd     # Autoload - command registration, execution, piping
+│   ├── DebugConsoleAPI.gd     # Autoload (DebugConsole) - PUBLIC plugin author API (Tier 4)
+│   ├── ConsoleCommand.gd      # Resource - declarative command definition
+│   ├── PersistenceManager.gd  # RefCounted - history + cwd persistence to user://
+│   └── BuiltInCommands.gd     # RefCounted - built-in command implementations
 ├── editor/         # Editor-specific components
 │   ├── EditorConsole.gd      # Editor console UI and logic
 │   └── EditorConsole.tscn    # Editor console scene
 ├── game/           # Runtime components
 │   ├── GameConsole.gd        # Runtime console UI
 │   ├── GameConsole.tscn      # Game console scene
-│   └── GameConsoleManager.gd # Runtime console management
+│   ├── GameConsoleManager.gd # Autoload - spawns GameConsole at runtime
+│   ├── GameConsoleManager.tscn
+│   └── GameConsoleLogger.gd  # Logger subclass - print/warning/error interceptor (Godot 4.5+, loaded via load())
 ├── tests/          # Test framework and test cases
-│   └── TestFramework.gd      # Comprehensive test suite
+│   ├── TestFramework.gd      # 247-test suite (v1.2.0)
+│   └── README.md             # Testing guide
 ├── icons/          # Plugin icons
 │   └── console_icon.svg      # Console icon
-└── plugin.gd       # Main plugin entry point
+└── plugin.gd       # EditorPlugin entry point - registers all 4 autoloads
 ```
+
+Top-level helpers (DO NOT modify in your PR unless the task is specifically about the test pipeline):
+- `.dc_test_runner.tscn` - headless scene that runs the test suite and writes results to disk
+- `.dc_test_runner.gd` - runner script
+- `.dc_test_results.json` - output of the most recent file-based run; `{"passed": N, "total": M, "ok": bool}`
 
 ## Code Style Guidelines
 
@@ -191,10 +202,11 @@ test("Integration - New Feature", func():
 ### Running Tests
 
 #### Before Submitting
-1. **Run all tests**: `test` (must achieve 100% pass rate)
-2. **Run specific tests**: `test_commands`, `test_autocomplete`, `test_files`
-3. **Verify no regressions** - Existing functionality still works
-4. **Test in both contexts** - Editor and game mode
+1. **Run all tests**: `test` in the console - must achieve **247/247 pass** (100% pass rate)
+2. **Run specific suites** when iterating: `test_commands`, `test_autocomplete`, `test_files`, `test_pipes`, `quick_test`
+3. **Verify no regressions** - existing functionality must still work; the Phase 4 regression tests (`Regression - B1`/`B2`/`B3`/`B4`) must all PASS
+4. **Test in both contexts** - editor and game mode
+5. **Headless / CI verification** - open the project, then run `res://.dc_test_runner.tscn`; check `res://.dc_test_results.json` for `"ok": true` and `"passed" == "total"`. Do not modify `.dc_test_runner.tscn` or `.dc_test_runner.gd` unless your PR is specifically about the test pipeline
 
 #### Test Framework Usage
 ```gdscript
@@ -321,7 +333,7 @@ What actually happens
 ## Environment
 - Godot Version: [e.g., 4.2.1]
 - OS: [e.g., Windows 11, macOS 13, Ubuntu 22.04]
-- Debug Console Version: [e.g., 1.0.0]
+- Debug Console Version: [e.g., 1.2.0]
 - Plugin Status: [Enabled/Disabled]
 
 ## Additional Information
@@ -415,4 +427,4 @@ This project follows the [Godot Code of Conduct](https://godotengine.org/code-of
 
 Thank you for contributing to the Debug Console addon! Your contributions help make Godot development better for everyone.
 
-—The Debug Console development team 
+-The Debug Console development team 

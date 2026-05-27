@@ -1,12 +1,12 @@
 extends Logger
-## T2.3 — GameConsole print interceptor.
+## T2.3 - GameConsole print interceptor.
 ##
 ## Conditionally loaded via load() from GameConsole.set_intercept_enabled()
 ## so this file is never PARSED on Godot < 4.5 (where the Logger class is
 ## not exposed to GDScript). The conditional load + has_method guards in
 ## the caller keep this file dormant on older engine versions.
 ##
-## We don't try to unregister — Godot 4.6 has OS.add_logger but no
+## We don't try to unregister - Godot 4.6 has OS.add_logger but no
 ## remove_logger from script. Instead, the logger checks the console's
 ## _intercept_enabled flag every callback. "intercept off" flips the
 ## flag; the logger keeps receiving events but discards them.

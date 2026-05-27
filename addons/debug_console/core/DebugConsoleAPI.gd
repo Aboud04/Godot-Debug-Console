@@ -44,7 +44,7 @@ signal command_unregistered(command_name: String)
 
 ## Emitted after every console command runs, regardless of whether it
 ## succeeded. [param command_name] is the first whitespace-separated token of
-## the executed input (lowercased) — for a pipeline like
+## the executed input (lowercased) - for a pipeline like
 ## [code]"echo hi | grep h"[/code] this is [code]"echo"[/code].
 ## [param args] is the remaining whitespace-separated tokens of the full
 ## input, as [Array] of [String]. [param result] is the final string the
@@ -76,7 +76,7 @@ var _watched_consoles: Dictionary = {}
 func _ready() -> void:
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
 	# Registry lives at /root/CommandRegistry. The plugin registers it BEFORE
-	# this autoload, so it should be present here — but we still tolerate it
+	# this autoload, so it should be present here - but we still tolerate it
 	# missing (e.g. registry reload, future refactors) and retry a few frames.
 	_connect_to_registry()
 	# Consoles may not yet exist when we run (the editor dock is added later
@@ -296,7 +296,7 @@ func _setup_console_watchers() -> void:
 		return
 	if not tree.node_added.is_connected(_on_node_added):
 		tree.node_added.connect(_on_node_added)
-	# Scan nodes that already exist at the time we run — the editor console
+	# Scan nodes that already exist at the time we run - the editor console
 	# panel may already be parented under the editor dock by the time our
 	# deferred call fires.
 	_scan_for_consoles(tree.root)

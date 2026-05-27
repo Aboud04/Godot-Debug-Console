@@ -10,17 +10,17 @@ const LOG_LEVEL_SUCCESS := 3
 # Meta key for the log line buffer. We store the buffer in node metadata
 # rather than as a class field so that hot-reload of @tool scripts doesn't
 # leave the buffer uninitialized on existing instances. Metadata is owned
-# by Object (not Script) and survives script reloads — adding new state
+# by Object (not Script) and survives script reloads - adding new state
 # this way means end users don't have to disable+re-enable the plugin
 # whenever we touch this file.
 const _META_LOG_BUFFER := "debug_console_log_buffer"
-# W1 bash polish — banner is emitted once per fresh _ready() of an instance.
+# W1 bash polish - banner is emitted once per fresh _ready() of an instance.
 # Tracked in meta so a @tool script reload that re-enters _ready() on the
 # same Control instance doesn't double-banner. New EditorConsole instances
 # always re-banner because they start without the meta flag.
 const _META_BANNER_SHOWN := "debug_console_banner_shown"
 
-# W1 bash polish — terminal palette. Pulled together at file scope so the
+# W1 bash polish - terminal palette. Pulled together at file scope so the
 # bash prompt, command coloring, and welcome banner all reference one source
 # of truth, and so the test suite can grep for the exact hex codes.
 const _COLOR_BANNER_TEXT := "#5FBEE0"
@@ -40,7 +40,7 @@ const _REVERSE_SEARCH_PROMPT_PREFIX := "(reverse-i-search)`"
 @onready var clear_button: Button = $VBox/InputPanel/ClearButton
 @onready var autocomplete_popup: PanelContainer = $AutocompletePopup
 @onready var autocomplete_list: ItemList = $AutocompletePopup/AutocompleteList
-# W1 bash polish — optional in-panel hint Label shown next to the prompt
+# W1 bash polish - optional in-panel hint Label shown next to the prompt
 # while reverse-search is active. Optional because EditorConsole.new()
 # (used by some tests) has no scene wiring.
 @onready var reverse_search_hint: Label = get_node_or_null("VBox/InputPanel/ReverseSearchHint") as Label
@@ -49,7 +49,7 @@ var command_history: Array[String] = []
 var history_index: int = -1
 var max_output_lines: int = 1000
 
-# T3.3 — injected by plugin.gd at startup. When non-null, the EditorConsole
+# T3.3 - injected by plugin.gd at startup. When non-null, the EditorConsole
 # loads its initial command_history from disk on set_persistence() and saves
 # back after every successful command submission. Tests can inject a stub
 # RefCounted that exposes save_history()/load_history() to verify the wiring
@@ -64,7 +64,7 @@ var _matching_commands: Array[String] = []
 var _autocomplete_mode: String = "commands"
 
 # T2.1 popup-driven autocomplete state. All fields are ephemeral session state
-# that resets on every interaction, so plain class fields are safe — there is
+# that resets on every interaction, so plain class fields are safe - there is
 # nothing to preserve across @tool script reloads.
 var _user_draft: String = ""
 var _popup_open: bool = false
@@ -78,12 +78,12 @@ var _last_input_action: String = ""
 var _suppress_text_changed: bool = false
 # Set true when the popup is opened by text-changed (passive). First Tab/Down
 # then PREVIEWS the highlighted suggestion (index 0) without cycling. Second
-# Tab cycles to index 1. This matches what users see — item 0 is highlighted
+# Tab cycles to index 1. This matches what users see - item 0 is highlighted
 # when the popup appears, so the first Tab should commit-preview that item,
 # not skip to item 1.
 var _preview_pending: bool = false
 
-# W1 bash polish — reverse-history-search ephemeral state. Reset on every
+# W1 bash polish - reverse-history-search ephemeral state. Reset on every
 # _enter / _exit transition; no need to survive @tool reload.
 var _reverse_search_active: bool = false
 var _reverse_search_query: String = ""
@@ -110,7 +110,7 @@ func _ready():
 	input_line.text_changed.connect(_on_input_text_changed)
 	input_line.focus_exited.connect(_on_input_focus_exited)
 	input_line.focus_mode = Control.FOCUS_ALL
-	# W1 bash polish — terminal-style blinking caret. Matches the cadence
+	# W1 bash polish - terminal-style blinking caret. Matches the cadence
 	# most bash/iTerm/Windows Terminal defaults use.
 	input_line.caret_blink = true
 	input_line.caret_blink_interval = 0.5
@@ -126,7 +126,7 @@ func _ready():
 	if not output_text.meta_clicked.is_connected(_on_output_meta_clicked):
 		output_text.meta_clicked.connect(_on_output_meta_clicked)
 	
-	# W1 bash polish — high-contrast off-white text on a near-black panel.
+	# W1 bash polish - high-contrast off-white text on a near-black panel.
 	# Editor themes can be very bright; bash-like dark output is far easier
 	# to read at length. We override only the colors we own (default_color
 	# is the BBCode fallback when no [color=...] is applied; font_color is
@@ -154,7 +154,7 @@ func _ready():
 		autocomplete_popup.visible = false
 	resized.connect(_on_self_resized)
 	
-	# W1 bash polish — multi-line welcome banner replaces the single-line
+	# W1 bash polish - multi-line welcome banner replaces the single-line
 	# "Editor Debug Console Ready". Emitted once per console instantiation
 	# (idempotent via _META_BANNER_SHOWN).
 	_emit_welcome_banner()
@@ -166,7 +166,7 @@ func focus_command_input():
 	input_line.call_deferred("grab_focus")
 	call_deferred("_apply_input_caret")
 
-# T3.3 — accept an external persistence manager (typically a
+# T3.3 - accept an external persistence manager (typically a
 # DebugConsolePersistenceManager) so the editor console can rehydrate
 # command_history on startup. Defensive against null and against stubs that
 # don't fully implement the interface so tests can pass a minimal RefCounted.
@@ -269,7 +269,7 @@ func get_log_buffer() -> Array:
 	return _ensure_log_buffer()
 
 # Returns the array stored in metadata, creating it on first access. The
-# returned reference is live — mutating it (append/erase) mutates the meta
+# returned reference is live - mutating it (append/erase) mutates the meta
 # storage. Use set_meta(_META_LOG_BUFFER, ...) to swap in a new array.
 func _ensure_log_buffer() -> Array:
 	if not has_meta(_META_LOG_BUFFER):
@@ -297,7 +297,7 @@ const _COLOR_ERROR_TOKEN := "#FF4444"
 const _COLOR_WARNING_TOKEN := "#FFAA00"
 
 func _colorize_message(message: String) -> String:
-	# Pre-colored caller — assume they know what they're doing and don't
+	# Pre-colored caller - assume they know what they're doing and don't
 	# re-wrap. This also protects us from accidentally matching the hex
 	# digits inside an existing [color=#...] tag.
 	if message.contains("[color="):
@@ -368,7 +368,7 @@ func _detect_paths(message: String, edits: Array, skip_ranges: Array, wrap_as_ur
 		var end_pos: int = i + matched_prefix.length()
 		while end_pos < n and _is_path_char(message[end_pos]):
 			end_pos += 1
-		# Bail if we didn't capture at least one trailing char — bare "res://"
+		# Bail if we didn't capture at least one trailing char - bare "res://"
 		# with nothing after is technically valid syntax but not a useful link.
 		if end_pos == i + matched_prefix.length():
 			i = end_pos
@@ -415,7 +415,7 @@ func _detect_numbers(message: String, edits: Array, skip_ranges: Array) -> void:
 			i += 1
 			while i < n and _is_digit(message[i]):
 				i += 1
-		# Optional unit suffix — longest match wins (so "ms" beats "s").
+		# Optional unit suffix - longest match wins (so "ms" beats "s").
 		var unit_end: int = i
 		var best_unit_len: int = 0
 		for u in units:
@@ -425,10 +425,10 @@ func _detect_numbers(message: String, edits: Array, skip_ranges: Array) -> void:
 		if best_unit_len > 0:
 			unit_end = i + best_unit_len
 		# Trailing word-boundary check: next char (if any) must not be a word
-		# char. Catches "42abc" — without this, we'd wrap "42" and visually
+		# char. Catches "42abc" - without this, we'd wrap "42" and visually
 		# split the identifier.
 		if unit_end < n and _is_word_char(message[unit_end]):
-			# Skip this whole run — advance past the digits we already consumed
+			# Skip this whole run - advance past the digits we already consumed
 			# AND past any trailing word chars so we don't re-enter mid-token.
 			i = unit_end
 			while i < n and _is_word_char(message[i]):
@@ -491,7 +491,7 @@ func _on_output_meta_clicked(meta: Variant) -> void:
 			var script: Script = load(path) as Script
 			if script:
 				# edit_script in Godot 4.6 requires (script, line, column,
-				# grab_focus). Calling with one arg silently fails — be explicit.
+				# grab_focus). Calling with one arg silently fails - be explicit.
 				EditorInterface.edit_script(script, 0, 0, true)
 				EditorInterface.set_main_screen_editor("Script")
 			else:
@@ -513,7 +513,7 @@ func _on_input_line_gui_input(event):
 	var ctrl: bool = key_event.ctrl_pressed
 	var shift: bool = key_event.shift_pressed or Input.is_key_pressed(KEY_SHIFT)
 	
-	# W1 bash polish — when reverse-i-search is active, the input line is
+	# W1 bash polish - when reverse-i-search is active, the input line is
 	# owned by the search loop. Every keystroke is interpreted as either
 	# query mutation, step-older, commit, or cancel until we exit.
 	if _reverse_search_active:
@@ -541,7 +541,7 @@ func _on_input_line_gui_input(event):
 				accept_event()
 				return
 			KEY_L:
-				# W1 bash polish — Ctrl+L clears scrollback like a terminal.
+				# W1 bash polish - Ctrl+L clears scrollback like a terminal.
 				# Input line content is preserved so the user doesn't lose
 				# whatever they were typing.
 				_last_input_action = "clear_output"
@@ -549,7 +549,7 @@ func _on_input_line_gui_input(event):
 				accept_event()
 				return
 			KEY_R:
-				# W1 bash polish — Ctrl+R enters reverse-history-search.
+				# W1 bash polish - Ctrl+R enters reverse-history-search.
 				# We snapshot the current input_line state so Esc restores
 				# verbatim, then hand control to _handle_reverse_search_key.
 				_last_input_action = "reverse_search"
@@ -559,7 +559,7 @@ func _on_input_line_gui_input(event):
 	
 	match key_event.keycode:
 		KEY_ENTER, KEY_KP_ENTER:
-			# Enter always submits the input AS-TYPED — never picks the popup
+			# Enter always submits the input AS-TYPED - never picks the popup
 			# highlight. This is correct UX for "I changed my mind, run what
 			# I typed."
 			_last_input_action = "submit"
@@ -586,7 +586,7 @@ func _on_input_line_gui_input(event):
 				# matches are ["help", "history"] we extend the line to "h"
 				# (which is already the LCP, no change), but if they type
 				# "te" and matches are ["test_one", "test_two"] we silently
-				# advance to "test_" and let them keep typing — only the
+				# advance to "test_" and let them keep typing - only the
 				# second Tab opens the popup. This matches `bash` behavior.
 				_refresh_autocomplete_matches()
 				var advanced: bool = _try_advance_to_common_prefix()
@@ -665,7 +665,7 @@ func _on_input_text_changed(new_text: String):
 	_show_autocomplete_popup()
 
 # Refresh _matching_commands based on the current word fragment under the
-# caret. Does NOT touch popup visibility — callers decide whether to show it.
+# caret. Does NOT touch popup visibility - callers decide whether to show it.
 func _refresh_autocomplete_matches() -> void:
 	if not is_instance_valid(input_line):
 		_matching_commands = []
@@ -784,7 +784,7 @@ func _dismiss_autocomplete_popup(restore_draft: bool) -> void:
 	if restore_draft and is_instance_valid(input_line):
 		input_line.text = _user_draft
 		input_line.caret_column = input_line.text.length()
-	# _user_draft is intentionally NOT cleared here — the user may type more
+	# _user_draft is intentionally NOT cleared here - the user may type more
 	# and we still need their pre-popup text. It resets to whatever is typed
 	# on the next text_changed.
 
@@ -826,7 +826,7 @@ func _preview_autocomplete_selection() -> void:
 	var idx: int = clamp(autocomplete_index, 0, _matching_commands.size() - 1)
 	var selected: String = str(_matching_commands[idx])
 	# The current "word" we replace is computed relative to _user_draft (the
-	# original text the user typed), NOT input_line.text — because input_line
+	# original text the user typed), NOT input_line.text - because input_line
 	# may already contain a previous preview. We rebuild from the draft each
 	# time so cycling stays consistent.
 	var draft: String = _user_draft
@@ -847,7 +847,7 @@ func _preview_autocomplete_selection() -> void:
 func _on_input_focus_exited() -> void:
 	# Defer dismiss so a click on a popup item still gets handled by the
 	# ItemList before we hide it. focus_mode = FOCUS_NONE on the ItemList
-	# means clicks usually don't move focus away from input_line — but we
+	# means clicks usually don't move focus away from input_line - but we
 	# defer anyway to be defensive.
 	call_deferred("_dismiss_if_focus_not_in_popup")
 
@@ -879,7 +879,7 @@ func _on_self_resized() -> void:
 	if _popup_open:
 		_position_autocomplete_popup()
 
-# T3.2 — commands whose first arg should be completed against the filesystem.
+# T3.2 - commands whose first arg should be completed against the filesystem.
 # Kept as a const so the dispatch logic stays readable and the list is easy
 # to audit/extend in future tiers.
 const _FILE_ARG_COMMANDS := [
@@ -887,12 +887,12 @@ const _FILE_ARG_COMMANDS := [
 	"find", "rm", "mv", "cp", "touch", "run_project"
 ]
 
-# T3.2 — commands whose first arg is a live node path (autoload short name,
+# T3.2 - commands whose first arg is a live node path (autoload short name,
 # Engine, or /root/.../Path). PUNT: for `get` / `set` the syntax is actually
 # `<target>.<property>` and a smarter completion would resolve the target
 # mid-typing and call get_property_list() to chain into its properties. That
 # requires per-target reflection at autocomplete time, which is expensive and
-# target-shape-dependent — out of T3.2 scope. We always suggest node paths
+# target-shape-dependent - out of T3.2 scope. We always suggest node paths
 # for the first arg and stop there.
 const _NODE_PATH_ARG_COMMANDS := [
 	"inspect", "get", "set", "watch", "scene_tree", "signals", "properties"
@@ -914,7 +914,7 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	# We're "on arg N" when there are N spaces left of the caret. Counting
 	# spaces is robust against trailing whitespace, multi-character commands,
 	# and the existing split(" ", false) which silently collapses runs and
-	# trims trailing empties — that collapse made the old dispatch
+	# trims trailing empties - that collapse made the old dispatch
 	# incorrectly classify "new_script " (trailing space, no second word) the
 	# same as "new_script".
 	var typed: String = text.substr(0, caret_pos)
@@ -927,10 +927,10 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	var command: String = parts[0].to_lower()
 	
 	# new_script / new_scene / new_resource:
-	#   1st arg → "filenames_only" — the user is inventing a brand-new
+	#   1st arg → "filenames_only" - the user is inventing a brand-new
 	#       filename, so we deliberately don't surface filesystem matches
 	#       (those would steer them toward an EXISTING file).
-	#   2nd arg of new_script / new_scene → "node_types" — base node class
+	#   2nd arg of new_script / new_scene → "node_types" - base node class
 	#       to extend. new_resource has no useful 2nd-arg completion and
 	#       falls through to "commands" which won't match anything.
 	if command in ["new_script", "new_scene", "new_resource"]:
@@ -1079,7 +1079,7 @@ func _get_node_type_suggestions(current_word: String):
 
 
 func _get_filename_suggestions(current_word: String) -> void:
-	# T3.2 — first arg of `new_script` / `new_scene` / `new_resource`. The
+	# T3.2 - first arg of `new_script` / `new_scene` / `new_resource`. The
 	# user is inventing a NEW file name; suggesting existing files in the
 	# current directory would push them toward the wrong action (overwriting
 	# or accidentally re-typing an existing name). Returning an empty list
@@ -1088,10 +1088,10 @@ func _get_filename_suggestions(current_word: String) -> void:
 	_last_autocomplete_word = current_word
 
 func _get_node_path_suggestions(current_word: String) -> void:
-	# T3.2 — live node-path suggestions for `inspect`, `get`, `set`, `watch`,
+	# T3.2 - live node-path suggestions for `inspect`, `get`, `set`, `watch`,
 	# `scene_tree`, `signals`, `properties`. Three sources are merged:
-	#   1) "Engine" (global singleton — always offered, prefix-filtered)
-	#   2) Direct children of /root — autoload short names (DebugCore,
+	#   1) "Engine" (global singleton - always offered, prefix-filtered)
+	#   2) Direct children of /root - autoload short names (DebugCore,
 	#      CommandRegistry, GameConsoleManager, ...) plus, at runtime, the
 	#      current scene's top node. These are addressable by short name.
 	#   3) Descendants of the edited scene root (editor) or /root (runtime)
@@ -1151,7 +1151,7 @@ func _collect_node_path_descendants(node: Node, current_word: String, suggestion
 
 
 # ================================================================
-# W1 bash polish — banner, prompt, syntax highlighting, common-prefix
+# W1 bash polish - banner, prompt, syntax highlighting, common-prefix
 # Tab, reverse-i-search. Each helper is self-contained and safe to
 # call without the @onready node refs being live (used by tests).
 # ================================================================
@@ -1185,7 +1185,7 @@ func _read_addon_version() -> String:
 
 # Renders the user-issued command as a bash-style prompt line. Prompt parts
 # use _COLOR_PROMPT_*; the command body is run through _colorize_command_input.
-# The "[user@host cwd]" brackets are LITERAL — printed as text, not BBCode.
+# The "[user@host cwd]" brackets are LITERAL - printed as text, not BBCode.
 # We use [lb]/[rb] tags so RichTextLabel renders the bracket glyphs verbatim.
 func _render_bash_prompt(command: String) -> String:
 	var user: String = _get_prompt_user()

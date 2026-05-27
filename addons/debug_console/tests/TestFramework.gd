@@ -506,7 +506,7 @@ func run_builtin_commands_tests():
 		var filename = ".test_save_log_" + str(Time.get_ticks_msec()) + ".txt"
 		var result = commands._save_log([filename])
 		# _resolve_output_path routes to res:// in editor, user:// at runtime.
-		# Use explicit String typing — GDScript 4.6 can't infer through the
+		# Use explicit String typing - GDScript 4.6 can't infer through the
 		# ternary expression below.
 		var expected_prefix: String = "res://" if Engine.is_editor_hint() else "user://"
 		var full_path: String = expected_prefix + filename
@@ -1104,7 +1104,7 @@ func run_builtin_commands_tests():
 			if not gc or not gc.has_method("is_intercept_available"):
 				return false
 			if not gc.call("is_intercept_available"):
-				# Engine lacks Logger API — feature unsupported here.
+				# Engine lacks Logger API - feature unsupported here.
 				# Treat as PASS (parity with how we skip platform-specific tests).
 				return true
 			var commands = BuiltInCommands.new()
@@ -1160,7 +1160,7 @@ func run_builtin_commands_tests():
 		# Known cosmetic warning: this test creates .gd files via _create_script
 		# which triggers Godot's async filesystem scan. By the time cleanup_test_file
 		# deletes the .gd, the scanner may still be loading it and will log a
-		# "File not found" error. The TEST RESULT is unaffected — the assertion
+		# "File not found" error. The TEST RESULT is unaffected - the assertion
 		# uses the .tscn contents we read synchronously before cleanup.
 		var commands: BuiltInCommands = BuiltInCommands.new()
 		var ts := Time.get_ticks_msec()
@@ -1647,7 +1647,7 @@ func run_autocomplete_tests():
 	# These exercise the per-mode dispatch in EditorConsole._determine_autocomplete_mode
 	# and the new node-path suggestion machinery. We instantiate EditorConsole
 	# directly with .new() (no scene fixture needed) because these methods don't
-	# touch @onready node references — they only walk the live SceneTree root
+	# touch @onready node references - they only walk the live SceneTree root
 	# and EditorInterface, both of which are reachable from a detached instance.
 
 	test("Autocomplete - Mode for inspect Is node_paths", func():
@@ -1927,7 +1927,7 @@ func run_editor_console_tests():
 		var first_pick: String = str(ec._matching_commands[0])
 		var second_pick: String = str(ec._matching_commands[1])
 		# First Tab after passive popup-open: previews match[0] WITHOUT cycling.
-		# This matches what the user sees — item 0 is visually highlighted.
+		# This matches what the user sees - item 0 is visually highlighted.
 		_simulate_key_event(ec, KEY_TAB)
 		var first_preview_ok: bool = ec.input_line.text == first_pick and ec._popup_open
 		var first_action_ok: bool = ec._last_input_action == "preview_current"
@@ -2448,7 +2448,7 @@ func run_game_console_tests():
 		if not gc:
 			return false
 		gc._execute_command("echo hi")
-		# Read from the meta-backed log buffer rather than RichTextLabel state —
+		# Read from the meta-backed log buffer rather than RichTextLabel state -
 		# RichTextLabel's text/get_parsed_text() don't reliably reflect appended
 		# content in headless run_scene contexts.
 		var buffer: Array = gc.get_log_buffer()
@@ -2899,7 +2899,7 @@ func run_game_console_tests():
 		gc._user_draft = "original-text"
 		gc._reverse_search_start()
 		gc._reverse_search_set_query("ec")
-		# Esc through the gui_input path — since _reverse_search_active is
+		# Esc through the gui_input path - since _reverse_search_active is
 		# true, the handler at the top of _on_input_line_gui_input routes
 		# the event to _handle_reverse_search_key → _reverse_search_cancel.
 		_simulate_key_event(gc, KEY_ESCAPE)
@@ -3111,7 +3111,7 @@ func run_debug_core_tests():
 		for i in range(10):
 			core.info("size-limit-" + str(i))
 		var ok: bool = core.get_history().size() == 5
-		# Restore — DebugCore is a live singleton, leaking state breaks other tests.
+		# Restore - DebugCore is a live singleton, leaking state breaks other tests.
 		core.max_history_size = saved_limit
 		core.clear_history()
 		for entry in saved_history:
@@ -3380,7 +3380,7 @@ func run_integration_tests():
 		var filename = ".test_save_log_integration_" + str(Time.get_ticks_msec()) + ".txt"
 		var result = registry.execute_command("save_log %s" % filename)
 		# _resolve_output_path routes to res:// in editor, user:// at runtime.
-		# Explicit String typing — GDScript 4.6 can't infer through the ternary.
+		# Explicit String typing - GDScript 4.6 can't infer through the ternary.
 		var expected_prefix: String = "res://" if Engine.is_editor_hint() else "user://"
 		var full_path: String = expected_prefix + filename
 		var file = FileAccess.open(full_path, FileAccess.READ)

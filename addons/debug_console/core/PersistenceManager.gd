@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsolePersistenceManager extends RefCounted
 
-# T3.3 — persistence layer for the Debug Console addon. Owned by plugin.gd and
+# T3.3 - persistence layer for the Debug Console addon. Owned by plugin.gd and
 # injected into EditorConsole (history) and BuiltInCommands (working directory)
 # so neither of those classes needs to know about disk I/O. Everything lives in
 # user:// JSON files that are robust to corruption (load returns sane defaults
@@ -9,8 +9,8 @@ class_name DebugConsolePersistenceManager extends RefCounted
 #
 # Two storage files are managed independently so that history truncation never
 # touches the project-cwd map and vice-versa:
-#   user://debug_console_history.json   — JSON array of command strings
-#   user://debug_console_state.json     — JSON dict { cwd_by_project: {...}, version: N }
+#   user://debug_console_history.json   - JSON array of command strings
+#   user://debug_console_state.json     - JSON dict { cwd_by_project: {...}, version: N }
 
 const HISTORY_PATH := "user://debug_console_history.json"
 const STATE_PATH := "user://debug_console_state.json"
@@ -18,7 +18,7 @@ const HISTORY_CAP := 500
 const STATE_VERSION := 1
 
 # Tests override these so they don't trample the real user files. Production
-# code never touches them — plugin.gd just calls new() and uses the defaults.
+# code never touches them - plugin.gd just calls new() and uses the defaults.
 var history_path: String = HISTORY_PATH
 var state_path: String = STATE_PATH
 
