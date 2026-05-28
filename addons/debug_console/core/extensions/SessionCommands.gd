@@ -94,7 +94,7 @@ func _cmd_session_load(args: Array, _piped_input: String = "") -> String:
 	if name.is_empty():
 		return _format_error("Invalid session name: %s" % str(args[0]))
 	var path := _path_for(name)
-	var bundle_or_err := _read_json(path)
+	var bundle_or_err: Variant = _read_json(path)
 	if bundle_or_err is String:
 		return _format_error(bundle_or_err)
 	if not (bundle_or_err is Dictionary):
@@ -207,10 +207,10 @@ func _cmd_session_diff(args: Array, _piped_input: String = "") -> String:
 	var name_b := _sanitize_name(str(args[1]))
 	if name_a.is_empty() or name_b.is_empty():
 		return _format_error("Invalid session name(s): %s, %s" % [str(args[0]), str(args[1])])
-	var a_or_err := _read_json(_path_for(name_a))
+	var a_or_err: Variant = _read_json(_path_for(name_a))
 	if a_or_err is String:
 		return _format_error(a_or_err)
-	var b_or_err := _read_json(_path_for(name_b))
+	var b_or_err: Variant = _read_json(_path_for(name_b))
 	if b_or_err is String:
 		return _format_error(b_or_err)
 	if not (a_or_err is Dictionary) or not (b_or_err is Dictionary):
@@ -672,7 +672,7 @@ func _peek_meta(path: String) -> Dictionary:
 		"timestamp": 0, "iso_time": "",
 		"history": 0, "aliases": 0, "pins": 0, "repl_vars": 0, "watches": 0,
 	}
-	var parsed := _read_json(path)
+	var parsed: Variant = _read_json(path)
 	if not (parsed is Dictionary):
 		return out
 	var d: Dictionary = parsed

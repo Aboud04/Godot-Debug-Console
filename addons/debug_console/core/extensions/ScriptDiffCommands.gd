@@ -92,10 +92,10 @@ func _cmd_script_diff_func(args: Array, piped_input: String = "") -> String:
 	var func_a: String = sel_a[1]
 	var func_b: String = sel_b[1]
 
-	var src_a := _read_file(path_a)
+	var src_a: Variant = _read_file(path_a)
 	if src_a == null:
 		return _format_error("Cannot read: %s" % path_a)
-	var src_b := _read_file(path_b)
+	var src_b: Variant = _read_file(path_b)
 	if src_b == null:
 		return _format_error("Cannot read: %s" % path_b)
 
@@ -125,10 +125,10 @@ func _cmd_script_blame(args: Array, piped_input: String = "") -> String:
 	if not FileAccess.file_exists(path):
 		return _format_error("File not found: %s" % path)
 
-	var src := _read_file(path)
+	var src: Variant = _read_file(path)
 	if src == null:
 		return _format_error("Cannot read: %s" % path)
-	var lines := src.split("\n", true)
+	var lines: PackedStringArray = str(src).split("\n", true)
 	if line_no > lines.size():
 		return _format_error("Line %d out of range (file has %d lines)" % [line_no, lines.size()])
 
@@ -236,10 +236,10 @@ func _cmd_script_revert(args: Array, piped_input: String = "") -> String:
 #region Diff core
 
 func _diff_files(path_a: String, path_b: String) -> String:
-	var src_a := _read_file(path_a)
+	var src_a: Variant = _read_file(path_a)
 	if src_a == null:
 		return _format_error("Cannot read: %s" % path_a)
-	var src_b := _read_file(path_b)
+	var src_b: Variant = _read_file(path_b)
 	if src_b == null:
 		return _format_error("Cannot read: %s" % path_b)
 	return _build_diff(src_a, src_b, path_a, path_b)
@@ -428,7 +428,7 @@ func _read_file(path: String) -> Variant:
 func _snapshot(path: String) -> bool:
 	if path.is_empty() or not FileAccess.file_exists(path):
 		return false
-	var content := _read_file(path)
+	var content: Variant = _read_file(path)
 	if content == null:
 		return false
 	var entries: Array = _history.get(path, []) as Array
