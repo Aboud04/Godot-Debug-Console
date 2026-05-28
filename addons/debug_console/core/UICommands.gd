@@ -401,7 +401,7 @@ func _get_overlay_layer() -> Node:
 
 	# In runtime `tree.current_scene` is the loaded scene root. In editor @tool
 	# context it may be null (the editor doesn't expose EditorInterface as an
-	# Engine singleton in Godot 4 — it's gated behind EditorPlugin), so fall
+	# Engine singleton in Godot 4 - it's gated behind EditorPlugin), so fall
 	# back to tree.root. A CanvasLayer parented to the Window root still
 	# overlays correctly; the user can always supply an explicit parent_path.
 	var scene_root: Node = tree.current_scene
@@ -444,7 +444,7 @@ func _resolve_node(path: String) -> Node:
 		n = tree.root.find_child(trimmed, true, false)
 	return n
 
-# Convenience cast — returns null (not a Node-shaped value) when the resolved
+# Convenience cast - returns null (not a Node-shaped value) when the resolved
 # node exists but isn't a Control. Callers can distinguish "missing" from
 # "wrong type" by re-resolving with _resolve_node when needed.
 func _resolve_control(path: String) -> Control:

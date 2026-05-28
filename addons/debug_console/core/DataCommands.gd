@@ -30,8 +30,6 @@ func register_commands(registry: Node, core: Node) -> void:
 	_core = core
 	if not _registry:
 		return
-	# Every command works in editor and runtime; file I/O resolves res:// and
-	# user:// the same way BuiltInCommands does (see _normalize_path).
 	_registry.register_command("csv_read", _cmd_csv_read, "Read a CSV file and render as an ASCII table (first row = headers, capped at 100 rows): csv_read <res://file.csv | user://file.csv>", "both")
 	_registry.register_command("csv_write", _cmd_csv_write, "Write piped rows to CSV (one row per line, commas split columns): csv_write <path>", "both", true)
 	_registry.register_command("json_read", _cmd_json_read, "Read a JSON file and pretty-print it: json_read <path>", "both")
@@ -115,8 +113,6 @@ func _cmd_json_write(args: Array, piped_input: String = "") -> String:
 	if parsed == null and piped_input.strip_edges() != "null":
 		return _format_error("Piped input is not valid JSON")
 	var path := _normalize_path(str(args[0]))
-	# Re-stringify after parse to normalize whitespace and prove the round-trip
-	# succeeded; writing the raw piped bytes would skip that validation.
 	var serialized := JSON.stringify(parsed, "  ")
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if not file:
@@ -129,8 +125,6 @@ func _cmd_table(args: Array, piped_input: String = "") -> String:
 	if piped_input.strip_edges().is_empty():
 		return _format_error("table requires piped input (CSV text or JSON array of objects)")
 	var trimmed := piped_input.strip_edges()
-	# Auto-detect: a JSON array/object always starts with [ or {. Anything
-	# else is treated as CSV. This avoids forcing callers to remember a flag.
 	if trimmed.begins_with("[") or trimmed.begins_with("{"):
 		var parsed: Variant = JSON.parse_string(trimmed)
 		if parsed == null:
@@ -138,14 +132,12 @@ func _cmd_table(args: Array, piped_input: String = "") -> String:
 		if parsed is Array:
 			return _render_json_array(parsed as Array)
 		if parsed is Dictionary:
-			# Single object: render as a two-column key|value table.
 			var d: Dictionary = parsed
 			var rows: Array = []
 			for k in d.keys():
 				rows.append([str(k), _stringify_value(d[k])])
 			return _format_table(rows, ["key", "value"])
 		return _format_error("Unsupported JSON shape for table")
-	# Fallback: parse as CSV with the first row as headers.
 	var csv_rows: Array = _parse_csv(piped_input)
 	if csv_rows.is_empty():
 		return _format_error("No rows parsed from piped input")
@@ -165,8 +157,6 @@ func _cmd_query(args: Array, piped_input: String = "") -> String:
 	var result: Variant = _query_json(parsed, selector)
 	if result == null:
 		return "[color=%s]null[/color]" % _COLOR_DIM
-	# Cap large array results so a selector like ".*" against a huge dataset
-	# does not blow up the terminal.
 	if result is Array and (result as Array).size() > _MAX_ROWS:
 		var arr: Array = (result as Array).slice(0, _MAX_ROWS)
 		return "%s\n[color=%s](capped at %d of %d)[/color]" % [
@@ -186,9 +176,6 @@ func _cmd_resource_read(args: Array, piped_input: String = "") -> String:
 	var res: Resource = load(path)
 	if not res:
 		return _format_error("Failed to load: %s" % path)
-	# Scripts get a dedicated dump because the property list of a GDScript is
-	# noisy and the interesting bits (class_name, base, methods) live on the
-	# Script object itself.
 	if res is Script:
 		return _dump_script(res as Script, path)
 	return _dump_resource(res, path)
@@ -219,8 +206,6 @@ func _cmd_resource_save(args: Array, piped_input: String = "") -> String:
 func _cmd_dir(args: Array, piped_input: String = "") -> String:
 	var raw := str(args[0]).strip_edges() if not args.is_empty() else "res://"
 	var path := _normalize_path(raw) if raw != "" else "res://"
-	# DirAccess.open returns null for missing directories instead of erroring,
-	# so check explicitly.
 	if not DirAccess.dir_exists_absolute(path):
 		return _format_error("Directory not found: %s" % path)
 	var dir := DirAccess.open(path)
@@ -285,9 +270,6 @@ func _cmd_hash(args: Array, piped_input: String = "") -> String:
 #region Helpers - rendering
 
 func _format_table(rows: Array, headers: Array) -> String:
-	# Lightweight ASCII renderer. Column widths are sized to the longest cell
-	# (header or body) in that column. Alignment is decided per column:
-	# right-aligned when every body cell parses as a number, left otherwise.
 	var col_count: int = headers.size()
 	for r in rows:
 		col_count = max(col_count, (r as Array).size() if r is Array else 0)
@@ -346,8 +328,6 @@ func _pad(s: String, width: int, align: String) -> String:
 func _render_json_array(arr: Array) -> String:
 	if arr.is_empty():
 		return "[color=%s](empty array)[/color]" % _COLOR_DIM
-	# Collect the union of keys across all dictionary entries so a missing
-	# field in one row still gets a placeholder column.
 	var headers: Array = []
 	var seen: Dictionary = {}
 	var all_objects := true
@@ -360,7 +340,6 @@ func _render_json_array(arr: Array) -> String:
 				seen[k] = true
 				headers.append(str(k))
 	if not all_objects:
-		# Fall back to a single "value" column for primitives or mixed arrays.
 		var rows: Array = []
 		for entry in arr:
 			rows.append([_stringify_value(entry)])
@@ -391,7 +370,6 @@ func _stringify_value(v: Variant) -> String:
 		return str(v)
 	if v is int or v is float:
 		return str(v)
-	# Compact JSON for nested structures so each table cell stays on one line.
 	return JSON.stringify(v)
 
 #endregion
@@ -519,7 +497,6 @@ func _query_json(data: Variant, selector: String) -> Variant:
 					return null
 				current = arr[idx]
 		else:
-			# Bare first segment: tolerate "field" with no leading dot.
 			var start2 := i
 			while i < n and sel[i] != '.' and sel[i] != '[':
 				i += 1

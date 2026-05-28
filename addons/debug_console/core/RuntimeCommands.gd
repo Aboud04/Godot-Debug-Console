@@ -52,7 +52,6 @@ func _format_header(text: String) -> String:
 func _format_value(text: String) -> String:
 	return "[color=%s]%s[/color]" % [_COLOR_VALUE, text]
 
-# Human-readable description for any InputEvent attached to an action.
 func _format_event(event: InputEvent) -> String:
 	if event is InputEventKey:
 		return _format_keycode(event)
@@ -361,8 +360,6 @@ func _cmd_step(args: Array) -> String:
 	var prev_scale: float = Engine.time_scale
 	Engine.time_scale = 1.0
 	tree.paused = false
-	# Approximate N physics frames as real-time sleep. Not frame-exact, but
-	# good enough for inspect-and-resume workflows. Documented in description.
 	var tps: int = max(Engine.physics_ticks_per_second, 1)
 	var sleep_ms: int = int(ceil(float(n) * 1000.0 / float(tps)))
 	OS.delay_msec(sleep_ms)
@@ -453,7 +450,6 @@ func _cmd_assets(args: Array) -> String:
 	var filter: String = ""
 	if args.size() > 0:
 		filter = str(args[0]).strip_edges().to_lower()
-	# Collect (path, size, ext) tuples.
 	var entries: Array[Array] = []
 	_walk_res(func(p: String) -> void:
 		# Skip Godot's import metadata + crash-prone meta files.
@@ -475,7 +471,6 @@ func _cmd_assets(args: Array) -> String:
 		if filter.is_empty():
 			return "No assets found under res://"
 		return "No assets matched filter: %s" % filter
-	# Group by extension, sorted within group by path.
 	var by_ext: Dictionary = {}
 	for e in entries:
 		var ext: String = String(e[2])

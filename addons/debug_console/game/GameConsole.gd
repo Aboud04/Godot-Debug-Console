@@ -107,7 +107,7 @@ func _command_registry() -> Node:
 
 func _ready():
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
-	add_to_group("GameConsole")  # Allows `font_size` command to locate us
+	add_to_group("GameConsole")
 	
 	_setup_ui()
 	
@@ -146,13 +146,12 @@ func _setup_ui():
 	# color toward white and bump the base font size so logs read cleanly
 	# at 1080p without having to override every category color.
 	output_text.add_theme_color_override("default_color", Color("#F0F0F0"))
-	# Bumped from 14 -> 16. Tunable at runtime via the `font_size` command.
-	output_text.add_theme_font_size_override("normal_font_size", 16)
-	# Bumped progressively (5 -> 12 -> 20) as the user kept seeing overlap.
-	# Zero out text_highlight_v_padding for the same reason as the editor
-	# console: BBCode color spans add vertical extent that needs explicit
-	# clearing in addition to line_separation.
-	output_text.add_theme_constant_override("line_separation", 20)
+	# Bumped progressively (14 -> 16 -> 18). Tunable at runtime via the
+	# `font_size` command.
+	output_text.add_theme_font_size_override("normal_font_size", 18)
+	# Bumped progressively (5 -> 12 -> 20 -> 22). Game console is slightly
+	# larger than editor since it overlays gameplay at 1080p.
+	output_text.add_theme_constant_override("line_separation", 22)
 	output_text.add_theme_constant_override("text_highlight_v_padding", 0)
 	
 	input_line.placeholder_text = "Enter command... (F12 to close)"
@@ -750,8 +749,6 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 	return "commands"
 
 func _get_command_suggestions(current_word: String) -> void:
-	# Extracted from the pre-T3.2 inline body of _refresh_command_matches so
-	# the mode dispatch can call it without re-walking the caret.
 	_matching_commands = []
 	var registry := _command_registry()
 	if not registry:
@@ -908,7 +905,6 @@ func _preview_autocomplete_selection() -> void:
 		return
 	var idx: int = clamp(selected_items[0], 0, _matching_commands.size() - 1)
 	var selected: String = str(_matching_commands[idx])
-	# Rebuild from the original user draft each time so cycling is consistent.
 	var draft: String = _user_draft
 	var word_start: int = draft.length()
 	while word_start > 0 and draft[word_start - 1] != " ":
@@ -1046,7 +1042,7 @@ func _tokenize_command(command: String) -> Array:
 			while i < n and command[i] != quote:
 				i += 1
 			if i < n:
-				i += 1  # include closing quote
+				i += 1
 			tokens.append(command.substr(start, i - start))
 			continue
 		if first == "|":
@@ -1104,16 +1100,11 @@ func _maybe_advance_to_common_prefix() -> bool:
 		return false
 	var new_text: String = current_text.substr(0, word_start) + lcp + current_text.substr(caret_pos)
 	var new_caret: int = word_start + lcp.length()
-	# Suppress the text_changed feedback loop while we mutate input_line
-	# directly. We update _user_draft ourselves so subsequent autocomplete
-	# refreshes don't snap back to the pre-advance text.
 	_suppress_text_changed = true
 	input_line.text = new_text
 	input_line.caret_column = new_caret
 	_suppress_text_changed = false
 	_user_draft = new_text
-	# Re-filter matches against the now-longer word; the popup keeps its
-	# open state but the candidate set may shrink.
 	_refresh_command_matches()
 	if _matching_commands.is_empty():
 		_dismiss_autocomplete_popup(false)
@@ -1150,10 +1141,6 @@ func _reverse_search_start() -> void:
 		input_line.placeholder_text = _REVERSE_SEARCH_PROMPT_PREFIX + "': "
 	_dismiss_autocomplete_popup(false)
 
-# Public-ish entry point: tests drive this directly to avoid having to
-# synthesize unicode-bearing key events. The handler at the top of
-# _on_input_line_gui_input calls the same method while building the
-# query character-by-character.
 func _reverse_search_set_query(query: String) -> void:
 	if not _reverse_search_active:
 		return

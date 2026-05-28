@@ -141,14 +141,6 @@ func register_universal_commands():
 	if not _registry:
 		return
 	# Transient-instance protection: if echo is already registered with a
-	# valid callable bound to a DIFFERENT live target (e.g. the persistent
-	# plugin instance), do not pollute the live registry with callables
-	# bound to this transient. The transient is about to be GC'd and its
-	# callables would become invalid, silently breaking ANY test that
-	# executes a universal command afterward (piping, autocomplete, etc).
-	# A fresh registry (plugin reload, autoload reset) has no echo, so this
-	# guard allows the legitimate first-time registration through. A re-call
-	# from the same persistent instance also passes through (target == self).
 	if _registry._commands.has("echo"):
 		var existing_echo: Callable = _registry._commands["echo"].get("callable", Callable())
 		if existing_echo.is_valid() and existing_echo.get_object() != self:
@@ -738,9 +730,6 @@ func _list_files(args: Array, input: String = "", is_pipe_context: bool = false)
 		return "Error: Cannot access directory"
 	
 	# Capture is_dir per-entry DURING iteration. The pre-T2.2 code called
-	# dir.current_is_dir() AFTER list_dir_end(), which returns whatever the
-	# iterator's final state was - effectively meaningless. We snapshot
-	# correctly here so both the short and long formats can rely on it.
 	var entries: Array = []
 	dir.list_dir_begin()
 	var file_name = dir.get_next()
@@ -1257,9 +1246,6 @@ func _process(delta):
 		return "Error: Failed to create script"
 
 # Strips leading dots and replaces non-identifier chars with underscores,
-# ensuring the result is a valid GDScript class_name. Used by _create_script
-# and _create_scene whose auto-generated class names would otherwise be
-# invalid for hidden test files (e.g. ".test_foo" -> ".TestFoo" -> parse error).
 func _sanitize_classname(raw: String) -> String:
 	if raw.is_empty():
 		return "GeneratedClass"
@@ -1295,9 +1281,6 @@ func _create_scene(args: Array) -> String:
 	var classname = _sanitize_classname(file_name.get_basename().capitalize().replace(" ", ""))
 	
 	# Write both the script and the scene under current_directory so they sit
-	# next to each other. Previously the script went to cwd while the scene
-	# went to project root, and the scene's ext_resource pointed at a path
-	# that didn't exist when cwd != res://.
 	var script_result = _create_script([script_name.get_basename(), root_type, classname])
 	if not script_result.contains("Created script"):
 		return "Error: " + script_result
@@ -1696,12 +1679,6 @@ func _save_log(args: Array) -> String:
 
 #region Testing commands
 
-# Load TestFramework lazily via load() instead of class_name resolution so that
-# a parse error in TestFramework.gd (likely during active test development)
-# does NOT cascade into BuiltInCommands.gd / plugin.gd at parse time and
-# silently take down the entire Debug Console. With this pattern, a broken
-# TestFramework only breaks the `test` command itself - the rest of the
-# console keeps working and you get a clear, recoverable error message.
 func _new_test_framework():
 	var script: GDScript = load("res://addons/debug_console/tests/TestFramework.gd")
 	if not script:
@@ -1930,9 +1907,6 @@ func _build_tree_lines(node: Node, prefix: String, is_last: bool, output: Array[
 #region T3.1 New commands
 
 # tree [depth] - visualize the filesystem under current_directory using the
-# same glyphs as _cmd_scene_tree. Hidden entries (begin with ".") are skipped.
-# Default depth = 3, hard-capped at 10 to prevent runaway recursion on deep
-# trees. Output is newline-joined so it pipes cleanly into wc / grep / head.
 func _cmd_tree(args: Array) -> String:
 	var depth: int = 3
 	if args.size() > 0:
@@ -1978,10 +1952,6 @@ func _build_fs_tree_lines(path: String, prefix: String, output: Array[String], m
 			_build_fs_tree_lines(path.path_join(item_name), next_prefix, output, max_depth, current_depth + 1)
 
 # wc <file> - bash-style line/word/char count. Counts piped input when
-# is_pipe_context is true and input is non-empty (e.g. `cat foo | wc`),
-# otherwise opens args[0] under current_directory. Lines = number of
-# \n-delimited segments. Words = whitespace-separated non-empty tokens.
-# Chars = total content length (including newlines).
 func _cmd_wc(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
 	var content: String = ""
 	var label: String = ""
@@ -2015,9 +1985,6 @@ func _cmd_wc(args: Array, input: String = "", is_pipe_context: bool = false) -> 
 	return "%5d %5d %5d %s" % [line_count, word_count, char_count, label]
 
 # signals <node_path> - list signal definitions on a live target with current
-# connection counts. Reuses _core._resolve_inspect_target so the same path
-# patterns supported by `inspect` work here (Engine, autoload shortnames,
-# absolute /root/... paths, recursive child names).
 func _cmd_signals(args: Array) -> String:
 	_ensure_dependencies()
 	if not _core:
@@ -2056,9 +2023,6 @@ func _cmd_signals(args: Array) -> String:
 	return "\n".join(lines)
 
 # properties <node_path> - filtered view of `inspect`: names + types only,
-# no values. Useful for discovering what `set <target>.<prop>` accepts.
-# Filter mirrors DebugCore._collect_properties so the output stays in sync
-# with what `inspect` shows.
 func _cmd_properties(args: Array) -> String:
 	_ensure_dependencies()
 	if not _core:
@@ -2134,9 +2098,6 @@ func _collect_and_reload_scripts(path: String, reloaded_counter: Array[int], fai
 	dir.list_dir_end()
 
 # diff <file_a> <file_b> - naive line-level diff (no Myers/LCS), with BBCode
-# coloring: red for removed (file A), green for added (file B). Walks both
-# files pair-wise up to max(len_a, len_b). Lines that match are emitted
-# verbatim with a two-space prefix.
 func _cmd_diff(args: Array) -> String:
 	if args.size() < 2:
 		return "Usage: diff <file_a> <file_b>"
@@ -2190,34 +2151,6 @@ func _resolve_diff_path(p: String) -> String:
 #endregion
 
 #region W1 - Output renderer helpers
-# Wave 1 output-renderer polish: a self-contained per-token colorizer plus
-# a `json` pretty-printer and a numeric duration formatter. The colorizer is
-# intentionally a near-mirror of the EditorConsole/GameConsole `_colorize_message`
-# but extended with four NEW token categories (strings, brackets, booleans,
-# null, keywords). Both consoles still own their own copies - this version
-# exists so the tests can exercise the extended pipeline without dragging in
-# Control/Tree fixtures.
-#
-# Detector order matters because of the `skip_ranges` system. Each detector
-# emits non-overlapping [start, end, replacement] edits which are sorted
-# descending and applied right-to-left so positions stay valid. Detectors
-# that should "claim" their span (so later detectors don't double-wrap
-# tokens inside it) append [start, end] to skip_ranges.
-#
-# Order, with rationale for each step:
-#   1. Error/Warning prefix  → claims [0, after_prefix]
-#   2. Paths (res:// user://) → claims the whole path (digits in paths must
-#                                not be re-detected as numbers)
-#   3. Quoted strings        → claims interior so numbers/brackets/keywords
-#                                inside a string stay green, not yellow/pink
-#   4. Brackets {}[]()       → single chars, NO skip claim (collide with
-#                                nothing - every other detector matches
-#                                multi-char letter-or-digit runs)
-#   5. Numbers (existing)    → respects skip_ranges, no skip claim
-#   6. Booleans true/false   → word-bounded, claims skip
-#   7. null                  → word-bounded, claims skip
-#   8. GDScript keywords     → word-bounded, respects everything above
-#                                (booleans/null already removed from list)
 
 const _DC_COLOR_PATH := "#5FBEE0"
 const _DC_COLOR_NUMBER := "#F7DC6F"
@@ -2339,9 +2272,6 @@ func _dc_detect_paths(message: String, edits: Array, skip_ranges: Array) -> void
 		i = end_pos
 
 # Walks the message and wraps the next matching `"..."` or `'...'` pair in
-# string color. The whole span (including the surrounding quotes) is added to
-# skip_ranges so later detectors leave the interior alone - keeps numbers,
-# brackets, and keywords inside a string from being colored separately.
 func _dc_detect_strings(message: String, edits: Array, skip_ranges: Array) -> void:
 	var n: int = message.length()
 	var i: int = 0
@@ -2367,9 +2297,6 @@ func _dc_detect_strings(message: String, edits: Array, skip_ranges: Array) -> vo
 		i = span_end
 
 # Single-char detector for grouping symbols. Brackets get their own yellow
-# (`#FFD700`) so they're visually distinct from number-yellow (`#F7DC6F`).
-# No skip-claim: brackets are single chars and don't collide with the
-# multi-char detectors (numbers/strings/words).
 func _dc_detect_brackets(message: String, edits: Array, skip_ranges: Array) -> void:
 	var n: int = message.length()
 	for i in n:
@@ -2420,10 +2347,6 @@ func _dc_detect_numbers(message: String, edits: Array, skip_ranges: Array) -> vo
 		edits.append([start, i, "[color=%s]%s[/color]" % [_DC_COLOR_NUMBER, token]])
 
 # Word-bounded multi-token detector. Used by booleans, null, and keywords.
-# Iterates char-by-char, attempts longest-match at each word boundary, and
-# optionally claims the matched span via skip_ranges so later passes don't
-# double-wrap. Word boundary = position 0 or previous char is not a word char,
-# AND trailing char is not a word char.
 func _dc_detect_word_tokens(message: String, tokens: Array, color: String, edits: Array, skip_ranges: Array, claim_skip: bool) -> void:
 	var n: int = message.length()
 	var i: int = 0
@@ -2488,11 +2411,6 @@ func _dc_is_in_skip_range(idx: int, ranges: Array) -> bool:
 	return false
 
 # Human-readable millisecond duration. Helper for benchmark/timer output;
-# not wired into existing callers yet - kept available for future commands
-# that want consistent formatting.
-#   0..999       → "Nms"
-#   1000..59999  → "X.Ys"
-#   60000+       → "MmSs"
 func _format_duration_ms(ms: int) -> String:
 	if ms < 0:
 		ms = 0
@@ -2527,7 +2445,7 @@ func _cmd_eval(args: Array) -> String:
 		var tree := Engine.get_main_loop() as SceneTree
 		if tree:
 			base_instance = tree.root
-	var result: Variant = expr.execute([], base_instance, true)
+	var result: Variant = expr.execute([], base_instance, false)
 	if expr.has_execute_failed():
 		return "Error: execute failed - " + expr.get_error_text()
 	if result == null:
@@ -2746,9 +2664,6 @@ func _cmd_crashtest(args: Array) -> String:
 	return msg
 
 # Live font-size tuning for the console output panels. Walks both the editor
-# and game consoles if they're present, applies font_size + a proportional
-# line_separation so vertical breathing room scales with text height. Read-only
-# when called with no args.
 func _cmd_font_size(args: Array) -> String:
 	if args.is_empty():
 		var current_editor: int = _get_console_font_size("EditorConsole")

@@ -1,31 +1,19 @@
 @tool
 class_name DebugConsolePrefabCommands extends RefCounted
 
-# Tier 7 - in-memory prefab snapshots. Saves a node + its descendants as a
-# PackedScene held in an instance dictionary, keyed by user-chosen name. Lets
-# you build something via create_node / ui_* / scene editing, snapshot it,
-# then mass-spawn copies without ever writing a .tscn to disk. Bridges the
-# gap between Tier 6 create_node (one node at a time) and Tier 6 spawn
-# (a full PackedScene loaded from res://).
-#
-# The dictionary lives on this RefCounted instance. BuiltInCommands keeps a
-# strong reference in _t6_keepalive, so prefabs persist across console panel
-# rebuilds and across editor/play cycles until prefab_drop or prefab_clear
-# is called, or until the plugin reloads.
+# Tier 7 - in-memory prefab snapshots.
+# Dictionary lives on this RefCounted via _t6_keepalive (persists across rebuilds).
 #
 # pack() correctness: PackedScene.pack() only walks descendants whose owner
-# is the node being packed. Rather than mutating the live source subtree's
-# owner chain (which would alter how the user's edited scene is saved), we
-# duplicate the source into a detached copy, rewrite owners on the copy,
-# pack the copy, and free it. The live source is never touched.
+# is the node being packed. Duplicate into detached copy, rewrite owners,
+# pack, and free to avoid mutating the live source's owner chain.
 
 const _COLOR_ERROR := "#FF4444"
 const _COLOR_PATH := "#5FBEE0"
 const _COLOR_SUCCESS := "#A0E0A0"
 const _COLOR_NUMBER := "#F7DC6F"
 
-# Soft cap for prefab_swarm and prefab_field so a stray zero in the wrong
-# spot does not lock the editor for minutes packing millions of nodes.
+# Soft cap: prevent UI lock from massive batch requests.
 const _MAX_BATCH := 10000
 
 var _registry: Node
@@ -95,8 +83,6 @@ func _cmd_prefab_list(_args: Array, _piped_input: String = "") -> String:
 		var node_count: int = state.get_node_count() if state else 0
 		var root_type: String = state.get_node_type(0) if state and node_count > 0 else "?"
 		var origin: String = str(_origin.get(n, "in-memory"))
-		# Size is approximate: 256 bytes per packed node is a rough average for
-		# typical UI / scene content. Reported as kib for at-a-glance comparison.
 		var approx_kib: float = (node_count * 256.0) / 1024.0
 		lines.append("  %s  root=%s  nodes=%s  ~%s kib  (%s)" % [
 			_color_path(str(n)),
@@ -152,8 +138,7 @@ func _cmd_prefab_spawn(args: Array, _piped_input: String = "") -> String:
 		return _format_error("Parent not found: %s" % (parent_path if not parent_path.is_empty() else "<default>"))
 
 	parent.add_child(instance)
-	# Editor mode: mirror Godot's "add child of edited scene" convention so the
-	# spawned prefab is saved with the scene rather than being silently dropped.
+	# Mirror Godot convention: persist spawned prefab with edited scene.
 	if Engine.is_editor_hint():
 		var root := _get_scene_root()
 		if root:
@@ -173,8 +158,6 @@ func _cmd_prefab_export(args: Array, _piped_input: String = "") -> String:
 	if args.size() < 2:
 		return _format_error("Usage: prefab_export <name> <res://path.tscn>")
 	if not Engine.is_editor_hint():
-		# Defensive: registry already gates this command to "editor", but the
-		# core's runtime fallback could still route it here in unusual setups.
 		return _format_error("prefab_export is editor-only (res:// writes at runtime are unreliable)")
 
 	var name := str(args[0]).strip_edges()
@@ -245,8 +228,7 @@ func _cmd_prefab_swarm(args: Array, _piped_input: String = "") -> String:
 	if args.size() < 4:
 		return _format_error("Usage: prefab_swarm <name> <count> <x,y,z> <half_extent>")
 	if Engine.is_editor_hint():
-		# Registered as "game" but guard anyway: spawning hundreds of nodes
-		# directly into the edited scene tree would be ugly and hard to undo.
+		# Game-only: avoid spawning into edited scene tree (hard to undo).
 		return _format_error("prefab_swarm is game-only (runs against the live scene tree)")
 
 	var name := str(args[0]).strip_edges()
@@ -411,10 +393,8 @@ func _cmd_prefab_field(args: Array, _piped_input: String = "") -> String:
 #region Helpers
 
 func _pack_subtree(source: Node) -> PackedScene:
-	# Duplicate into a detached copy so we never touch the live source's owner
-	# chain (which would change how the user's edited scene serializes). Then
-	# rewrite owners on the duplicate so PackedScene.pack() includes every
-	# descendant, pack, and free.
+	# Duplicate detached to preserve live source's owner chain,
+	# then rewrite owners so pack() includes all descendants.
 	var flags: int = (
 		Node.DUPLICATE_GROUPS
 		| Node.DUPLICATE_SIGNALS
@@ -434,10 +414,8 @@ func _pack_subtree(source: Node) -> PackedScene:
 
 func _set_owners_recursively(node: Node, root: Node) -> void:
 	for child in node.get_children():
-		# Sub-instances (children that were instantiated from their own scene
-		# file) need owner set on the instance root so they are packed as an
-		# instance placeholder; we do not recurse into them, because their
-		# descendants belong to the sub-scene and should not be re-owned.
+		# Sub-instances need owner on instance root (packed as instance placeholder).
+		# Do not recurse into them-their descendants belong to the sub-scene.
 		child.owner = root
 		if child.scene_file_path != "":
 			continue
@@ -450,9 +428,8 @@ func _count_descendants(node: Node) -> int:
 	return total
 
 func _apply_position(node: Node, value: Variant) -> void:
-	# Set position on whatever positional axis the node has. Mismatched
-	# dimensions are silently ignored: the spawn itself succeeded, so we
-	# leave the node at the origin rather than erroring out.
+	# Set position, adapting across 2D/3D dimensions.
+	# Dimension mismatches are silently ignored (spawn succeeded).
 	if node is Node3D and value is Vector3:
 		(node as Node3D).position = value
 	elif node is Node3D and value is Vector2:
@@ -470,8 +447,7 @@ func _apply_position(node: Node, value: Variant) -> void:
 		(node as Control).position = Vector2(v3c.x, v3c.y)
 
 func _get_scene_root() -> Node:
-	# Editor: the currently-edited scene's root. Runtime: the active scene
-	# (falls back to /root when no current_scene is set, e.g. headless tests).
+	# Editor: current scene root. Runtime: current_scene, or /root if unset.
 	if Engine.is_editor_hint():
 		return EditorInterface.get_edited_scene_root()
 	var tree := Engine.get_main_loop() as SceneTree

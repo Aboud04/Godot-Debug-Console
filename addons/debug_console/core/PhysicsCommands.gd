@@ -5,18 +5,6 @@ class_name DebugConsolePhysicsCommands extends RefCounted
 # "shake the simulation and see what happens" debugging workflow: cast rays
 # from arbitrary points, dump live overlap sets, kick rigid bodies, swap
 # collision masks on the fly, and yank gravity to stress test reactions.
-#
-# Every command in this module is registered with context "game" because the
-# PhysicsServer space state and Performance.PHYSICS_3D_* monitors are only
-# meaningful inside a running SceneTree. Calling these from the editor would
-# either operate on a default empty world (raycasts always miss) or crash
-# (intersect_shape on a null space). The Engine.is_editor_hint() guards
-# inside each command are belt-and-suspenders: the registry already filters
-# by context, but a console invocation through the alias system or a piped
-# call could bypass that, so the commands defend themselves.
-#
-# Color palette and helper shape mirror SceneCommands.gd so output renders
-# consistently with the rest of the Tier 6/7 surface.
 
 const _COLOR_ERROR := "#FF4444"
 const _COLOR_PATH := "#5FBEE0"
@@ -31,10 +19,6 @@ func register_commands(registry: Node, core: Node) -> void:
 	_core = core
 	if not _registry:
 		return
-	# All commands are runtime-only (context "game"). Editor lacks a populated
-	# PhysicsDirectSpaceState3D, and applying force to bodies in the edited
-	# scene would mutate persistent transforms in ways the user did not ask
-	# for. Bodies, layers, and gravity must be debugged against the live sim.
 	_registry.register_command("raycast", _cmd_raycast, "Cast a 3D ray: raycast <fx,fy,fz> <tx,ty,tz> [collision_mask]", "game")
 	_registry.register_command("raycast2d", _cmd_raycast2d, "Cast a 2D ray: raycast2d <fx,fy> <tx,ty> [collision_mask]", "game")
 	_registry.register_command("apply_force", _cmd_apply_force, "Apply central force to RigidBody3D: apply_force <path> <fx,fy,fz>", "game")
@@ -144,10 +128,8 @@ func _cmd_set_velocity(args: Array, _piped_input: String = "") -> String:
 	var vel := _parse_vec3(str(args[1]))
 	if vel == null:
 		return _format_error("Expected vec3 'vx,vy,vz' for velocity")
-	# Both RigidBody3D and CharacterBody3D expose linear_velocity, but they
-	# inherit from different base classes (PhysicsBody3D in both cases). A
-	# duck-typed check is more permissive than is-RigidBody/is-CharacterBody
-	# pairs and also catches any user subclasses that re-expose the property.
+	# Both RigidBody3D and CharacterBody3D expose linear_velocity.
+	# Duck-type check catches user subclasses that re-expose the property.
 	if not "linear_velocity" in node:
 		return _format_error("%s has no linear_velocity property (need RigidBody3D or CharacterBody3D)" % node.get_path())
 	node.set("linear_velocity", vel)
@@ -194,8 +176,6 @@ func _cmd_bodies_at(args: Array, _piped_input: String = "") -> String:
 	params.shape = sphere
 	params.transform = Transform3D(Basis(), point)
 	params.collision_mask = mask
-	# 32 result cap matches the PhysicsServer3D default; raising it costs a
-	# scan over the spatial index for every extra slot regardless of hits.
 	var hits: Array[Dictionary] = space.intersect_shape(params, 32)
 	if hits.is_empty():
 		return "No bodies within radius %s of %s (mask %s)" % [_color_num(str(radius)), _color_num(str(point)), _color_num("0x%08X" % mask)]
@@ -271,13 +251,6 @@ func _cmd_set_mask(args: Array, _piped_input: String = "") -> String:
 func _cmd_gravity(args: Array, _piped_input: String = "") -> String:
 	if Engine.is_editor_hint():
 		return _format_error("gravity only works in runtime")
-	# Godot stores gravity as a magnitude (physics/3d/default_gravity) plus a
-	# direction (physics/3d/default_gravity_vector). We expose the combined
-	# vector for ergonomic use. Note: ProjectSettings writes persist for the
-	# next play session but the live default area does not re-read them, so
-	# we additionally push to PhysicsServer3D where possible. Already-spawned
-	# bodies that are inside a custom Area3D with gravity override are not
-	# affected; that is expected (their area takes precedence).
 	var mag: float = float(ProjectSettings.get_setting("physics/3d/default_gravity", 9.8))
 	var dir: Vector3 = ProjectSettings.get_setting("physics/3d/default_gravity_vector", Vector3(0, -1, 0))
 	if args.is_empty():
@@ -293,9 +266,6 @@ func _cmd_gravity(args: Array, _piped_input: String = "") -> String:
 	var new_dir: Vector3 = new_grav.normalized() if new_mag > 0.0 else Vector3(0, -1, 0)
 	ProjectSettings.set_setting("physics/3d/default_gravity", new_mag)
 	ProjectSettings.set_setting("physics/3d/default_gravity_vector", new_dir)
-	# Push to the live space's default area so the change takes effect this
-	# physics frame. PhysicsServer3D.area_set_param against the world's
-	# default-area RID is exposed via World3D in Godot 4.x.
 	var pushed: bool = _push_gravity_to_live_world(new_mag, new_dir)
 	var note: String = " (live world updated)" if pushed else " (project setting only; restart play to apply to live world)"
 	return _format_success("Set gravity to %s%s" % [_color_num(str(new_dir * new_mag)), note])
@@ -370,8 +340,6 @@ func _get_space_2d() -> PhysicsDirectSpaceState2D:
 	return world.direct_space_state
 
 func _parse_vec3(raw: String) -> Variant:
-	# Returns Vector3 or null. We use Variant rather than Vector3 because GDScript
-	# typed returns cannot express "null vector" cleanly; callers null-check.
 	var s := raw.strip_edges()
 	if not s.contains(","):
 		return null
@@ -402,8 +370,6 @@ func _parse_vec2(raw: String) -> Variant:
 	return Vector2(nums[0], nums[1])
 
 func _parse_bits(raw: String) -> int:
-	# Accepts decimal (e.g. "5") or hex (e.g. "0x1F"). Returns -1 on failure
-	# so callers can distinguish "user passed 0" from "parse failed".
 	var s := raw.strip_edges().to_lower()
 	if s.begins_with("0x"):
 		var hex := s.substr(2)
@@ -418,10 +384,6 @@ func _parse_bits(raw: String) -> int:
 	return -1
 
 func _count_sleeping_bodies() -> int:
-	# Performance does not expose sleeping count directly. Walking the live
-	# tree is acceptable for a debug dump: rigid body counts in a typical
-	# scene are in the dozens to low thousands, and this command is only
-	# invoked on user demand.
 	var root := _get_scene_root()
 	if not root:
 		return 0
@@ -436,10 +398,6 @@ func _count_sleeping_bodies() -> int:
 	return count
 
 func _push_gravity_to_live_world(magnitude: float, direction: Vector3) -> bool:
-	# World3D exposes its default-area RID indirectly via PhysicsServer3D in
-	# Godot 4.x. We try the area_set_param path; if the API surface differs
-	# in the running engine version, we return false so the caller can warn
-	# the user that only ProjectSettings was updated.
 	var tree := _get_scene_tree()
 	if not tree or not tree.root:
 		return false
@@ -452,11 +410,6 @@ func _push_gravity_to_live_world(magnitude: float, direction: Vector3) -> bool:
 	var space: RID = world.space
 	if not space.is_valid():
 		return false
-	# Iterate any Area3D nodes whose gravity_space_override is DEFAULT plus
-	# the world's default area. We cannot acquire the default area RID
-	# directly without a node, so we apply via PhysicsServer3D.area_set_param
-	# on every Area3D in the tree that uses default-space gravity, which
-	# covers the common case (no explicit gravity overrides).
 	var root := _get_scene_root()
 	if not root:
 		return false

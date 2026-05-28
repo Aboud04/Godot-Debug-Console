@@ -23,11 +23,10 @@ config/icon="uid://bx514ndiixgu1"
 
 [autoload]
 
-GameConsoleManager="*uid://dsr8e7vkd3scc"
-CommandRegistry="*uid://ce5ap1y1kwavq"
 DebugCore="*uid://ctmkncwpk2qma"
+CommandRegistry="*uid://ce5ap1y1kwavq"
 DebugConsole="*uid://d010a0e3yyovw"
-GodotIQRuntime="*uid://doddcfisuprv3"
+GameConsoleManager="*uid://dsr8e7vkd3scc"
 
 [debug]
 
@@ -35,4 +34,4 @@ enable_game_console=true
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/debug_console/plugin.cfg", "res://addons/godot_mcp/plugin.cfg", "res://addons/godotiq/plugin.cfg")
+enabled=PackedStringArray("res://addons/debug_console/plugin.cfg")

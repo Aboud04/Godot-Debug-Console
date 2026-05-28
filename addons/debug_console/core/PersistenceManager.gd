@@ -32,9 +32,19 @@ func load_history() -> Array[String]:
 		return out
 	var text: String = f.get_as_text()
 	f.close()
-	if text.strip_edges().is_empty():
+	var trimmed: String = text.strip_edges()
+	if trimmed.is_empty():
 		return out
-	var parsed: Variant = JSON.parse_string(text)
+	# Pre-screen the structural shape before invoking JSON.parse_string. The
+	# parse method pushes a "Parse JSON failed" error to the editor Output
+	# panel when called on malformed input, which is noisy during the
+	# "corrupted history file" recovery path (we want a single push_warning,
+	# not two log lines). Histories are always JSON arrays, so anything that
+	# does not start with [ is corrupted by definition.
+	if not trimmed.begins_with("["):
+		push_warning("Debug Console: history file is corrupted, starting fresh: %s" % history_path)
+		return out
+	var parsed: Variant = JSON.parse_string(trimmed)
 	if typeof(parsed) != TYPE_ARRAY:
 		push_warning("Debug Console: history file is corrupted, starting fresh: %s" % history_path)
 		return out
@@ -82,9 +92,17 @@ func _load_state() -> Dictionary:
 		return default_state
 	var text: String = f.get_as_text()
 	f.close()
-	if text.strip_edges().is_empty():
+	var trimmed: String = text.strip_edges()
+	if trimmed.is_empty():
 		return default_state
-	var parsed: Variant = JSON.parse_string(text)
+	# Pre-screen for the same reason load_history does: avoid Godot's
+	# "Parse JSON failed" error when the file is structurally broken.
+	# State is always a JSON dictionary, so anything not starting with { is
+	# corrupted by definition.
+	if not trimmed.begins_with("{"):
+		push_warning("Debug Console: state file is corrupted, starting fresh: %s" % state_path)
+		return default_state
+	var parsed: Variant = JSON.parse_string(trimmed)
 	if typeof(parsed) != TYPE_DICTIONARY:
 		push_warning("Debug Console: state file is corrupted, starting fresh: %s" % state_path)
 		return default_state

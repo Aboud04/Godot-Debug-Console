@@ -26,9 +26,6 @@ func register_commands(registry: Node, core: Node) -> void:
 	_core = core
 	if not _registry:
 		return
-	# Scene/node commands work in both editor and runtime contexts. Where the
-	# semantics differ (editor edits the currently-open scene, runtime mutates
-	# the live tree) the implementation branches on Engine.is_editor_hint().
 	_registry.register_command("spawn", _cmd_spawn, "Instance a scene at runtime: spawn <res://scene.tscn> [parent_path] [x,y,z]", "both")
 	_registry.register_command("instance_scene", _cmd_instance_scene, "Instance a scene without setting a position: instance_scene <res://scene.tscn> [parent_path]", "both")
 	_registry.register_command("create_node", _cmd_create_node, "Create a node by class name: create_node <type> [parent_path] [name]", "both")
@@ -74,8 +71,6 @@ func _cmd_spawn(args: Array, piped_input: String = "") -> String:
 		return _format_error("Parent not found: %s" % (parent_path if not parent_path.is_empty() else "<default>"))
 
 	parent.add_child(instance)
-	# In editor we mirror Godot's own "add child of edited scene" convention so
-	# the node is saved with the scene rather than ignored.
 	if Engine.is_editor_hint():
 		var root := _get_scene_root()
 		if root:
@@ -89,8 +84,6 @@ func _cmd_spawn(args: Array, piped_input: String = "") -> String:
 			(instance as Node2D).position = pos_value
 		elif instance is Control and pos_value is Vector2:
 			(instance as Control).position = pos_value
-		# Silently skip mismatched dimensions - the spawn itself succeeded;
-		# the user just gets the node at the origin.
 
 	var spawned_path: String = str(instance.get_path()) if instance.is_inside_tree() else instance.name
 	return _format_success("Spawned %s" % _color_path(spawned_path))
@@ -98,9 +91,6 @@ func _cmd_spawn(args: Array, piped_input: String = "") -> String:
 func _cmd_instance_scene(args: Array, piped_input: String = "") -> String:
 	if args.is_empty():
 		return _format_error("Usage: instance_scene <res://scene.tscn> [parent_path]")
-	# Delegate to spawn but drop any position arg; mirroring spawn keeps the
-	# semantics (parent defaulting, editor owner assignment, error formatting)
-	# identical and avoids drift.
 	var forwarded: Array = [args[0]]
 	if args.size() > 1:
 		forwarded.append(args[1])
@@ -120,8 +110,6 @@ func _cmd_create_node(args: Array, piped_input: String = "") -> String:
 
 	var created: Object = ClassDB.instantiate(type_name)
 	if not (created is Node):
-		# Non-Node classes (Resources, etc.) are almost always RefCounted and
-		# auto-free when this local reference drops, so we just bail out.
 		return _format_error("Class is not a Node: %s" % type_name)
 
 	var node: Node = created
@@ -212,8 +200,6 @@ func _cmd_duplicate_node(args: Array, piped_input: String = "") -> String:
 	if not parent:
 		return _format_error("Cannot duplicate a node with no parent: %s" % path)
 
-	# DUPLICATE_USE_INSTANTIATION re-instances any nested PackedScene rather
-	# than deep-copying its baked state, which is what users almost always want.
 	var copy: Node = node.duplicate(Node.DUPLICATE_USE_INSTANTIATION)
 	if not copy:
 		return _format_error("Duplicate failed: %s" % path)
@@ -414,8 +400,6 @@ func _cmd_tween(args: Array, piped_input: String = "") -> String:
 	var trans_arg: String = str(args[4]).strip_edges().to_lower() if args.size() > 4 else ""
 	var ease_arg: String = str(args[5]).strip_edges().to_lower() if args.size() > 5 else ""
 
-	# Tweens must be created against a SceneTree. Editor-edited nodes are not
-	# inside a live tree, so this falls back to Engine.get_main_loop().
 	var tree: SceneTree = node.get_tree() if node.is_inside_tree() else (Engine.get_main_loop() as SceneTree)
 	if not tree:
 		return _format_error("No SceneTree available for tweening")
@@ -423,8 +407,6 @@ func _cmd_tween(args: Array, piped_input: String = "") -> String:
 	if not tween:
 		return _format_error("Failed to create Tween")
 
-	# Seed the property to `from` so the tween animates the full range even
-	# when the current value is something else.
 	node.set_indexed(property_path, from_val)
 	var tweener: PropertyTweener = tween.tween_property(node, property_path, to_val, duration)
 	var trans_type: int = _parse_trans(trans_arg)
@@ -490,8 +472,6 @@ func _cmd_count_nodes(args: Array, piped_input: String = "") -> String:
 #region Helpers
 
 func _get_scene_root() -> Node:
-	# Editor: the currently-edited scene's root. Runtime: the active scene
-	# (falls back to /root when no current_scene is set, e.g. headless tests).
 	if Engine.is_editor_hint():
 		return EditorInterface.get_edited_scene_root()
 	var tree := Engine.get_main_loop() as SceneTree
@@ -510,8 +490,6 @@ func _resolve_node(path: String) -> Node:
 		return null
 
 	if Engine.is_editor_hint():
-		# Editor mode: all paths are relative to the edited scene root.
-		# Accept "/root/..." and strip it for convenience.
 		var root := _get_scene_root()
 		if not root:
 			return null
@@ -529,8 +507,6 @@ func _resolve_node(path: String) -> Node:
 			return root
 		return root.get_node_or_null(p)
 
-	# Runtime mode: absolute paths resolve via tree.root; relative paths
-	# resolve under the current scene (or /root when there is none).
 	var tree := Engine.get_main_loop() as SceneTree
 	if not tree:
 		return null
@@ -540,8 +516,6 @@ func _resolve_node(path: String) -> Node:
 	return scene.get_node_or_null(p)
 
 func _split_selector(selector: String) -> Array:
-	# Split <path>.<name> on the rightmost dot so absolute paths like
-	# "/root/Main.position" still parse cleanly. Returns [path, name] or [].
 	var idx := selector.rfind(".")
 	if idx <= 0 or idx >= selector.length() - 1:
 		return []
@@ -557,11 +531,8 @@ func _parse_value(raw: String) -> Variant:
 		return true
 	if s == "false":
 		return false
-	# Quoted string (single or double).
 	if (s.begins_with("\"") and s.ends_with("\"")) or (s.begins_with("'") and s.ends_with("'")):
 		return s.substr(1, s.length() - 2)
-	# Comma-separated numeric → Vector2/3/4 for convenience (used by spawn position
-	# and tween from/to).
 	if s.contains(","):
 		var parts: PackedStringArray = s.split(",")
 		var nums: Array[float] = []

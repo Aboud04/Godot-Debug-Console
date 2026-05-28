@@ -20,9 +20,7 @@ const _META_LOG_BUFFER := "debug_console_log_buffer"
 # always re-banner because they start without the meta flag.
 const _META_BANNER_SHOWN := "debug_console_banner_shown"
 
-# W1 bash polish - terminal palette. Pulled together at file scope so the
-# bash prompt, command coloring, and welcome banner all reference one source
-# of truth, and so the test suite can grep for the exact hex codes.
+# W1 bash polish - terminal palette.
 const _COLOR_BANNER_TEXT := "#5FBEE0"
 const _COLOR_PROMPT_DIM := "#606060"
 const _COLOR_PROMPT_USER := "#44FF44"
@@ -40,9 +38,7 @@ const _REVERSE_SEARCH_PROMPT_PREFIX := "(reverse-i-search)`"
 @onready var clear_button: Button = $VBox/InputPanel/ClearButton
 @onready var autocomplete_popup: PanelContainer = $AutocompletePopup
 @onready var autocomplete_list: ItemList = $AutocompletePopup/AutocompleteList
-# W1 bash polish - optional in-panel hint Label shown next to the prompt
-# while reverse-search is active. Optional because EditorConsole.new()
-# (used by some tests) has no scene wiring.
+# W1 bash polish - optional in-panel hint Label for reverse-search mode.
 @onready var reverse_search_hint: Label = get_node_or_null("VBox/InputPanel/ReverseSearchHint") as Label
 
 var command_history: Array[String] = []
@@ -68,19 +64,11 @@ var _autocomplete_mode: String = "commands"
 # nothing to preserve across @tool script reloads.
 var _user_draft: String = ""
 var _popup_open: bool = false
-# Records the last shortcut routed through _on_input_line_gui_input so tests
-# can verify the right branch fired even in headless contexts where LineEdit
-# selection / caret state may not always reflect the call.
+# Test-tracking: last shortcut routed through _on_input_line_gui_input.
 var _last_input_action: String = ""
-# Set true while _preview_autocomplete_selection writes to input_line so the
-# resulting text_changed signal doesn't overwrite _user_draft. Real user
-# keystrokes always leave this false.
+# Suppresses text_changed signal during programmatic writes to input_line.
 var _suppress_text_changed: bool = false
-# Set true when the popup is opened by text-changed (passive). First Tab/Down
-# then PREVIEWS the highlighted suggestion (index 0) without cycling. Second
-# Tab cycles to index 1. This matches what users see - item 0 is highlighted
-# when the popup appears, so the first Tab should commit-preview that item,
-# not skip to item 1.
+# Defers preview of index 0 until first Tab/Down after popup opens.
 var _preview_pending: bool = false
 
 # W1 bash polish - reverse-history-search ephemeral state. Reset on every
@@ -96,11 +84,7 @@ var _reverse_search_pre_input: String = ""
 var _reverse_search_pre_caret: int = 0
 var _reverse_search_pre_placeholder: String = ""
 
-# --- T5 readline shortcuts: kill ring (single-slot, per-instance) ---
-# Holds the last killed text from Ctrl+W / Ctrl+K for Ctrl+Y to yank back
-# at the caret. Bash uses a multi-slot ring; one slot is enough here since
-# nothing in the addon needs ring rotation today. Independent per console
-# instance - no global sharing between EditorConsole and GameConsole.
+# T5 readline: last killed text (single-slot kill ring, per-instance).
 var _kill_ring: String = ""
 
 const _MAX_POPUP_ITEMS := 12
@@ -118,8 +102,7 @@ func _ready():
 	input_line.text_changed.connect(_on_input_text_changed)
 	input_line.focus_exited.connect(_on_input_focus_exited)
 	input_line.focus_mode = Control.FOCUS_ALL
-	# W1 bash polish - terminal-style blinking caret. Matches the cadence
-	# most bash/iTerm/Windows Terminal defaults use.
+	# W1 bash polish - terminal-style blinking caret.
 	input_line.caret_blink = true
 	input_line.caret_blink_interval = 0.5
 	send_button.pressed.connect(_on_send_pressed)
@@ -134,23 +117,11 @@ func _ready():
 	if not output_text.meta_clicked.is_connected(_on_output_meta_clicked):
 		output_text.meta_clicked.connect(_on_output_meta_clicked)
 	
-	# W1 bash polish - high-contrast off-white text on a near-black panel.
-	# Editor themes can be very bright; bash-like dark output is far easier
-	# to read at length. We override only the colors we own (default_color
-	# is the BBCode fallback when no [color=...] is applied; font_color is
-	# the legacy field some themes still honor). The font size bump nudges
-	# the output toward terminal density.
+	# W1 bash polish - high-contrast off-white text on dark panel.
 	output_text.add_theme_color_override("default_color", Color("#E0E0E0"))
 	output_text.add_theme_color_override("font_color", Color("#E0E0E0"))
-	# Bumped from 13 -> 15 (user feedback: too small to read). Tunable at
-	# runtime via the `font_size` command.
-	output_text.add_theme_font_size_override("normal_font_size", 15)
-	# Bumped progressively (4 -> 10 -> 18) as the user kept seeing overlap.
-	# At Godot's default font with 15px size, BBCode color spans appear to add
-	# vertical extent that needs ~18px of breathing room to clear adjacent lines.
-	# Also zero out text_highlight_v_padding so the [color=...] span box does
-	# not contribute extra height of its own.
-	output_text.add_theme_constant_override("line_separation", 18)
+	output_text.add_theme_font_size_override("normal_font_size", 17)
+	output_text.add_theme_constant_override("line_separation", 20)
 	output_text.add_theme_constant_override("text_highlight_v_padding", 0)
 	var output_panel: Panel = output_text.get_parent() as Panel
 	if output_panel:
@@ -171,9 +142,7 @@ func _ready():
 		autocomplete_popup.visible = false
 	resized.connect(_on_self_resized)
 	
-	# W1 bash polish - multi-line welcome banner replaces the single-line
-	# "Editor Debug Console Ready". Emitted once per console instantiation
-	# (idempotent via _META_BANNER_SHOWN).
+	# W1 bash polish - multi-line welcome banner.
 	_emit_welcome_banner()
 
 func focus_command_input():
@@ -530,9 +499,7 @@ func _on_input_line_gui_input(event):
 	var ctrl: bool = key_event.ctrl_pressed
 	var shift: bool = key_event.shift_pressed or Input.is_key_pressed(KEY_SHIFT)
 	
-	# W1 bash polish - when reverse-i-search is active, the input line is
-	# owned by the search loop. Every keystroke is interpreted as either
-	# query mutation, step-older, commit, or cancel until we exit.
+	# W1 bash polish - reverse-i-search mode: input line owned by search loop.
 	if _reverse_search_active:
 		_handle_reverse_search_key(key_event)
 		accept_event()
@@ -558,17 +525,13 @@ func _on_input_line_gui_input(event):
 				accept_event()
 				return
 			KEY_L:
-				# W1 bash polish - Ctrl+L clears scrollback like a terminal.
-				# Input line content is preserved so the user doesn't lose
-				# whatever they were typing.
+				# W1 bash polish - Ctrl+L clears scrollback; input preserved.
 				_last_input_action = "clear_output"
 				clear_output()
 				accept_event()
 				return
 			KEY_R:
-				# W1 bash polish - Ctrl+R enters reverse-history-search.
-				# We snapshot the current input_line state so Esc restores
-				# verbatim, then hand control to _handle_reverse_search_key.
+				# W1 bash polish - Ctrl+R enters reverse-history-search mode.
 				_last_input_action = "reverse_search"
 				_enter_reverse_search()
 				accept_event()
@@ -622,8 +585,7 @@ func _on_input_line_gui_input(event):
 					_last_input_action = "cycle_prev"
 					_cycle_autocomplete_selection(-1)
 				elif _preview_pending:
-					# First Tab after popup opened by typing: preview the
-					# currently-highlighted item (index 0) WITHOUT cycling.
+					# Preview index 0 without cycling on first Tab after popup opens.
 					_last_input_action = "preview_current"
 					_preview_pending = false
 				else:
@@ -631,13 +593,7 @@ func _on_input_line_gui_input(event):
 					_cycle_autocomplete_selection(1)
 				_preview_autocomplete_selection()
 			else:
-				# Popup not yet open: try a bash-style shared-prefix advance
-				# BEFORE we open the popup. If the user types "h" and the
-				# matches are ["help", "history"] we extend the line to "h"
-				# (which is already the LCP, no change), but if they type
-				# "te" and matches are ["test_one", "test_two"] we silently
-				# advance to "test_" and let them keep typing - only the
-				# second Tab opens the popup. This matches `bash` behavior.
+				# Bash-style shared-prefix advance before opening popup.
 				_refresh_autocomplete_matches()
 				var advanced: bool = _try_advance_to_common_prefix()
 				if advanced:
@@ -646,8 +602,7 @@ func _on_input_line_gui_input(event):
 					_last_input_action = "open_popup"
 					_show_autocomplete_popup()
 					if _popup_open and not _matching_commands.is_empty():
-						# We just opened the popup via Tab; the user wants
-						# the preview NOW, not on a subsequent Tab.
+						# Preview index 0 immediately after opening popup via Tab.
 						_preview_pending = false
 						_preview_autocomplete_selection()
 			accept_event()
@@ -760,9 +715,7 @@ func _show_autocomplete_popup() -> void:
 	_populate_popup_list()
 	autocomplete_popup.visible = true
 	_popup_open = true
-	# Passive popup-open (from typing): first Tab/Down previews index 0
-	# without cycling. _preview_autocomplete_selection() and the Tab handler
-	# clear this flag on first use.
+	# Preview pending flag set on first use by Tab/Down handler.
 	_preview_pending = true
 	autocomplete_index = 0
 	if is_instance_valid(autocomplete_list) and autocomplete_list.item_count > 0:
@@ -776,10 +729,7 @@ func _populate_popup_list() -> void:
 	autocomplete_list.clear()
 	for suggestion in _matching_commands:
 		autocomplete_list.add_item(str(suggestion))
-	# Reset to ZERO immediately so layout starts shrinking, AND defer a
-	# second pass so the ItemList's auto_height has time to recompute its
-	# minimum_size against the new item count before we reset_size().
-	# Without the deferred pass the panel keeps the largest size ever shown.
+	# Reset size and defer shrink to let ItemList recompute minimum_size.
 	autocomplete_list.size = Vector2.ZERO
 	if is_instance_valid(autocomplete_popup):
 		autocomplete_popup.size = Vector2.ZERO
@@ -806,8 +756,7 @@ func _position_autocomplete_popup() -> void:
 	var popup_min_width: float = max(input_global.size.x, 200.0)
 	# Width is min-clamped; height is left at 0 so reset_size() can shrink.
 	autocomplete_popup.custom_minimum_size = Vector2(popup_min_width, 0)
-	# Defer the final placement so the PanelContainer + ItemList have laid out
-	# and we know the popup's real height before deciding above-vs-below.
+	# Defer placement after layout finishes to know popup's real height.
 	call_deferred("_finalize_popup_position", input_global)
 
 func _finalize_popup_position(input_global: Rect2) -> void:
@@ -815,8 +764,7 @@ func _finalize_popup_position(input_global: Rect2) -> void:
 		return
 	var popup_size: Vector2 = autocomplete_popup.size
 	var viewport_size: Vector2 = get_viewport_rect().size
-	# Prefer above the input line. Drop below if the popup would clip off
-	# the top of the viewport.
+	# Prefer above input; drop below if popup clips off top of viewport.
 	var above_y: float = input_global.position.y - popup_size.y
 	var below_y: float = input_global.position.y + input_global.size.y
 	var y: float = above_y
@@ -834,16 +782,13 @@ func _dismiss_autocomplete_popup(restore_draft: bool) -> void:
 	if restore_draft and is_instance_valid(input_line):
 		input_line.text = _user_draft
 		input_line.caret_column = input_line.text.length()
-	# _user_draft is intentionally NOT cleared here - the user may type more
-	# and we still need their pre-popup text. It resets to whatever is typed
-	# on the next text_changed.
+	# _user_draft persists for next keystroke; clears on text_changed.
 
 func _cycle_autocomplete_selection(delta: int) -> void:
 	if _matching_commands.is_empty():
 		return
 	var count: int = _matching_commands.size()
-	# Modulo with explicit positive-wrap so Shift+Tab at index 0 lands on the
-	# last item rather than -1.
+	# Positive-wrap modulo: Shift+Tab at index 0 lands on last item, not -1.
 	autocomplete_index = ((autocomplete_index + delta) % count + count) % count
 	if is_instance_valid(autocomplete_list) and autocomplete_index < autocomplete_list.item_count:
 		autocomplete_list.select(autocomplete_index)
@@ -865,9 +810,8 @@ func _apply_autocomplete_selection() -> void:
 	input_line.caret_column = word_start + selected.length()
 	_dismiss_autocomplete_popup(false)
 
-# Writes the current highlighted suggestion into input_line WITHOUT dismissing
-# the popup. Used by Tab/Up/Down cycling so the user gets bash-style live
-# preview of the cycled completion. Esc still restores _user_draft.
+# Preview the current highlighted suggestion without dismissing popup.
+# User can cycle and preview (bash-style); Esc restores draft.
 func _preview_autocomplete_selection() -> void:
 	if _matching_commands.is_empty() or autocomplete_index < 0:
 		return
@@ -875,30 +819,21 @@ func _preview_autocomplete_selection() -> void:
 		return
 	var idx: int = clamp(autocomplete_index, 0, _matching_commands.size() - 1)
 	var selected: String = str(_matching_commands[idx])
-	# The current "word" we replace is computed relative to _user_draft (the
-	# original text the user typed), NOT input_line.text - because input_line
-	# may already contain a previous preview. We rebuild from the draft each
-	# time so cycling stays consistent.
+	# Rebuild preview from original draft each time for consistent cycling.
 	var draft: String = _user_draft
-	# Find the word being completed in the draft. We treat caret-at-end as
-	# the simple case (overwhelmingly common); for now we always assume the
-	# user is completing the last whitespace-delimited word of their draft.
+	# Find the last whitespace-delimited word in the draft.
 	var word_start: int = draft.length()
 	while word_start > 0 and draft[word_start - 1] != " ":
 		word_start -= 1
 	var new_text: String = draft.substr(0, word_start) + selected
-	# Block our own text_changed handler from re-triggering autocomplete and
-	# overwriting _user_draft as we write the preview.
+	# Block text_changed handler from overwriting _user_draft during preview write.
 	_suppress_text_changed = true
 	input_line.text = new_text
 	input_line.caret_column = new_text.length()
 	_suppress_text_changed = false
 
 func _on_input_focus_exited() -> void:
-	# Defer dismiss so a click on a popup item still gets handled by the
-	# ItemList before we hide it. focus_mode = FOCUS_NONE on the ItemList
-	# means clicks usually don't move focus away from input_line - but we
-	# defer anyway to be defensive.
+	# Defer dismiss to allow ItemList to handle click before hiding popup.
 	call_deferred("_dismiss_if_focus_not_in_popup")
 
 func _dismiss_if_focus_not_in_popup() -> void:
@@ -930,34 +865,21 @@ func _on_self_resized() -> void:
 		_position_autocomplete_popup()
 
 # T3.2 - commands whose first arg should be completed against the filesystem.
-# Kept as a const so the dispatch logic stays readable and the list is easy
-# to audit/extend in future tiers.
 const _FILE_ARG_COMMANDS := [
 	"ls", "cat", "grep", "head", "tail", "stat", "wc", "open", "diff",
 	"find", "rm", "mv", "cp", "touch", "run_project"
 ]
 
-# T3.2 - commands whose first arg is a live node path (autoload short name,
-# Engine, or /root/.../Path). PUNT: for `get` / `set` the syntax is actually
-# `<target>.<property>` and a smarter completion would resolve the target
-# mid-typing and call get_property_list() to chain into its properties. That
-# requires per-target reflection at autocomplete time, which is expensive and
-# target-shape-dependent - out of T3.2 scope. We always suggest node paths
-# for the first arg and stop there.
+# T3.2 - commands whose first arg is a live node path.
+# FUTURE: For `get`/`set`, syntax is `<target>.<property>` requiring per-target reflection.
 const _NODE_PATH_ARG_COMMANDS := [
 	"inspect", "get", "set", "watch", "scene_tree", "signals", "properties"
 ]
 
-# Depth cap for scene-tree descendant walks. Without a cap, instanced
-# sub-scenes (e.g. a full UI scene with hundreds of leaves) can balloon the
-# suggestion list and stall the popup. 4 is enough to cover typical UI
-# hierarchies (CanvasLayer > Control > VBox > Item) without exploding.
+# Depth cap for scene-tree descendant walks; prevents suggestion balloon.
 const _NODE_PATH_DEPTH_CAP := 4
 
-# Hard cap on the number of node-path suggestions returned. The popup cap
-# (_MAX_POPUP_ITEMS) is smaller and applied afterwards, but we still bound
-# here so the test-facing API doesn't dump a 200-item list on callers that
-# bypass the popup pipeline.
+# Hard cap on node-path suggestions; popup applies its own smaller cap.
 const _NODE_PATH_MAX_SUGGESTIONS := 20
 
 func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
@@ -976,13 +898,8 @@ func _determine_autocomplete_mode(text: String, caret_pos: int) -> String:
 		return "commands"
 	var command: String = parts[0].to_lower()
 	
-	# new_script / new_scene / new_resource:
-	#   1st arg → "filenames_only" - the user is inventing a brand-new
-	#       filename, so we deliberately don't surface filesystem matches
-	#       (those would steer them toward an EXISTING file).
-	#   2nd arg of new_script / new_scene → "node_types" - base node class
-	#       to extend. new_resource has no useful 2nd-arg completion and
-	#       falls through to "commands" which won't match anything.
+	# new_script / new_scene: arg 1 → "filenames_only", arg 2 → "node_types".
+	# new_resource: no useful 2nd-arg completion (falls through to "commands").
 	if command in ["new_script", "new_scene", "new_resource"]:
 		if arg_index >= 2 and command in ["new_script", "new_scene"]:
 			return "node_types"
@@ -1129,23 +1046,13 @@ func _get_node_type_suggestions(current_word: String):
 
 
 func _get_filename_suggestions(current_word: String) -> void:
-	# T3.2 - first arg of `new_script` / `new_scene` / `new_resource`. The
-	# user is inventing a NEW file name; suggesting existing files in the
-	# current directory would push them toward the wrong action (overwriting
-	# or accidentally re-typing an existing name). Returning an empty list
-	# leaves the popup closed and lets them type freely.
+	# T3.2 - first arg of `new_*`: user invents NEW names; empty list encourages typing.
 	_matching_commands = []
 	_last_autocomplete_word = current_word
 
 func _get_node_path_suggestions(current_word: String) -> void:
-	# T3.2 - live node-path suggestions for `inspect`, `get`, `set`, `watch`,
-	# `scene_tree`, `signals`, `properties`. Three sources are merged:
-	#   1) "Engine" (global singleton - always offered, prefix-filtered)
-	#   2) Direct children of /root - autoload short names (DebugCore,
-	#      CommandRegistry, GameConsoleManager, ...) plus, at runtime, the
-	#      current scene's top node. These are addressable by short name.
-	#   3) Descendants of the edited scene root (editor) or /root (runtime)
-	#      as absolute /root/... paths, capped at depth 4.
+	# T3.2 - node paths for `inspect`, `get`, `set`, `watch`, etc.
+	# Sources: "Engine" (global), autoload short names, and /root/... absolute paths (depth capped).
 	var suggestions: Array[String] = []
 	
 	if current_word.is_empty() or "Engine".begins_with(current_word):
@@ -1166,8 +1073,7 @@ func _get_node_path_suggestions(current_word: String) -> void:
 	
 	var scene_root: Node = null
 	if Engine.is_editor_hint():
-		# EditorInterface is the @tool-global editor singleton, already used
-		# elsewhere in this file (open_scene_from_path, edit_script, etc.).
+		# EditorInterface is the editor global singleton.
 		scene_root = EditorInterface.get_edited_scene_root()
 	elif tree:
 		scene_root = tree.root
@@ -1181,11 +1087,8 @@ func _get_node_path_suggestions(current_word: String) -> void:
 	_last_autocomplete_word = current_word
 
 func _collect_node_path_descendants(node: Node, current_word: String, suggestions: Array[String], depth: int) -> void:
-	# Capped recursive walk. Each descendant is added as its absolute
-	# `/root/...` path. We keep recursing even when the parent's path
-	# doesn't match the prefix, because a deeper descendant's full path
-	# may still match (e.g. prefix "/root/Main/Player" only matches at
-	# depth >=2 from /root).
+	# Capped recursive walk; adds descendants as absolute /root/... paths.
+	# Recurses even if parent path doesn't match; deeper descendants may match.
 	if depth >= _NODE_PATH_DEPTH_CAP:
 		return
 	if not is_instance_valid(node):
@@ -1206,10 +1109,7 @@ func _collect_node_path_descendants(node: Node, current_word: String, suggestion
 # call without the @onready node refs being live (used by tests).
 # ================================================================
 
-# Emits the multi-line welcome banner exactly once per console instance.
-# Idempotency is enforced via _META_BANNER_SHOWN so a hot @tool reload
-# that re-enters _ready() on the same Control instance doesn't double-
-# banner. A brand-new EditorConsole always re-banners.
+# Emits multi-line welcome banner once per console instance (enforced via _META_BANNER_SHOWN).
 func _emit_welcome_banner() -> void:
 	if has_meta(_META_BANNER_SHOWN):
 		return
@@ -1222,9 +1122,7 @@ func _emit_welcome_banner() -> void:
 	add_log_message(body, LOG_LEVEL_INFO)
 	add_log_message(ftr, LOG_LEVEL_INFO)
 
-# Reads addons/debug_console/plugin.cfg without forcing a runtime dependency
-# on its exact location. Returns "1.2.0" on any failure so the banner is
-# always renderable. ConfigFile silently handles missing fields.
+# Reads version from plugin.cfg; returns "1.2.0" on any failure.
 func _read_addon_version() -> String:
 	var cfg := ConfigFile.new()
 	var err: int = cfg.load("res://addons/debug_console/plugin.cfg")
@@ -1233,10 +1131,7 @@ func _read_addon_version() -> String:
 	var v = cfg.get_value("plugin", "version", "1.2.0")
 	return str(v)
 
-# Renders the user-issued command as a bash-style prompt line. Prompt parts
-# use _COLOR_PROMPT_*; the command body is run through _colorize_command_input.
-# The "[user@host cwd]" brackets are LITERAL - printed as text, not BBCode.
-# We use [lb]/[rb] tags so RichTextLabel renders the bracket glyphs verbatim.
+# Render bash-style prompt line. Bracket glyphs use [lb]/[rb] for literal text rendering.
 func _render_bash_prompt(command: String) -> String:
 	var user: String = _get_prompt_user()
 	var host: String = "godot"
@@ -1252,9 +1147,7 @@ func _render_bash_prompt(command: String) -> String:
 	]
 	return prompt + _colorize_command_input(command)
 
-# Username for the prompt. OS.get_environment is the cheapest portable
-# source; falls back to "user" if both USER and USERNAME are unset
-# (sandboxed CI, exotic Linux distros, headless runners).
+# Username for prompt; falls back to "user" if both USER and USERNAME are unset.
 func _get_prompt_user() -> String:
 	var u: String = OS.get_environment("USER")
 	if u.is_empty():
@@ -1263,11 +1156,8 @@ func _get_prompt_user() -> String:
 		u = "user"
 	return u
 
-# Current "working directory" for the prompt. EditorConsole shares the
-# BuiltInCommands static cwd with GameConsole so 'cd', 'ls', etc. behave
-# consistently across the two consoles. Falls back to "res://" if the
-# BuiltInCommands script can't be loaded (older plugin version, restricted
-# user project, etc.).
+# Current working directory for prompt; shared with BuiltInCommands.
+# Falls back to "res://" if BuiltInCommands is unavailable.
 func _get_prompt_cwd() -> String:
 	var cwd: String = ""
 	var script: GDScript = load("res://addons/debug_console/core/BuiltInCommands.gd") as GDScript
@@ -1277,14 +1167,9 @@ func _get_prompt_cwd() -> String:
 		cwd = "res://"
 	return cwd
 
-# Per-token colorization of the command line that gets echoed back. We
-# split on whitespace (preserving quoted strings as single tokens) and
-# colorize:
-#   - Token 0  -> command name (yellow)
-#   - Tokens beginning with "-" -> flag (magenta)
-#   - Tokens equal to "|" or ">" / ">>" / "<" -> pipe / redirect (magenta)
-#   - Tokens enclosed in matching quotes -> string literal (cyan)
-#   - Everything else -> plain (no wrapping)
+# Per-token colorization of the command line echoed back.
+# Token 0 → command (yellow); "-*" → flag (magenta); "|/>/>/>/<" → pipe/redirect (magenta);
+# quoted strings → literal (cyan); else → plain.
 func _colorize_command_input(command: String) -> String:
 	if command.is_empty():
 		return command
@@ -1311,19 +1196,14 @@ func _colorize_command_input(command: String) -> String:
 			out_parts.append("[color=%s]%s[/color]" % [color, tok])
 	return "".join(out_parts)
 
-# Returns true if `tokens[index]` is the first non-blank token in the
-# array - i.e. the command name. Defensive helper so a leading space
-# in the user's input doesn't accidentally color the second token as
-# the command.
+# True if tokens[index] is the first non-blank token (i.e. the command name).
 func _is_first_non_blank_token(tokens: Array[String], index: int) -> bool:
 	for j in range(index):
 		if not tokens[j].strip_edges().is_empty():
 			return false
 	return not tokens[index].strip_edges().is_empty()
 
-# Splits a command line into tokens, preserving runs of whitespace as
-# their own tokens (so echo round-trips the user's spacing) and treating
-# quoted spans as a single token including the quote characters.
+# Tokenize command line preserving whitespace runs and quoted strings as single tokens.
 func _tokenize_command_preserving_quotes(command: String) -> Array[String]:
 	var result: Array[String] = []
 	var i: int = 0
@@ -1353,8 +1233,7 @@ func _tokenize_command_preserving_quotes(command: String) -> Array[String]:
 		i = k
 	return result
 
-# Longest common prefix across an array of strings. Returns "" if the
-# array is empty. Used by the Tab common-prefix advance.
+# Longest common prefix across array of strings. Used by Tab prefix advance.
 func _longest_common_prefix(words: Array) -> String:
 	if words.is_empty():
 		return ""
@@ -1370,11 +1249,8 @@ func _longest_common_prefix(words: Array) -> String:
 			return ""
 	return prefix
 
-# When Tab is pressed and the popup is NOT yet open, attempt to extend
-# the current word to the longest common prefix of all matches. Returns
-# true if any text was inserted (so the caller skips opening the popup).
-# This is the bash UX: typing "te<TAB>" with matches ["test_a","test_b"]
-# extends to "test_" silently, and only a SECOND Tab opens the menu.
+# Tab: advance current word to longest common prefix if popup not yet open.
+# Returns true if text was inserted (bash UX: second Tab opens menu).
 func _try_advance_to_common_prefix() -> bool:
 	if _matching_commands.size() < 2:
 		return false
@@ -1401,9 +1277,7 @@ func _try_advance_to_common_prefix() -> bool:
 	return true
 
 # ---------------- reverse-i-search ----------------
-# Captures current input_line state, switches the placeholder to the
-# bash-style "(reverse-i-search)`':" prompt, and sets _reverse_search_*
-# fields so subsequent keystrokes are routed to _handle_reverse_search_key.
+# Enter reverse-i-search mode: capture state and route keystrokes to _handle_reverse_search_key.
 func _enter_reverse_search() -> void:
 	if not is_instance_valid(input_line):
 		return
@@ -1423,9 +1297,8 @@ func _enter_reverse_search() -> void:
 		reverse_search_hint.visible = true
 		reverse_search_hint.text = _build_reverse_search_hint_text()
 
-# Leaves reverse-search mode. If `commit` is false, restores the original
-# input_line state (Esc behavior). If true, leaves the matched command in
-# input_line for the user to edit or submit.
+# Exit reverse-search mode. If commit=false, restore original input_line (Esc).
+# If true, leave matched command in input_line.
 func _exit_reverse_search(commit: bool) -> void:
 	if not _reverse_search_active:
 		return
@@ -1447,8 +1320,7 @@ func _exit_reverse_search(commit: bool) -> void:
 	_reverse_search_pre_caret = 0
 	_reverse_search_pre_placeholder = ""
 
-# Rebuilds the placeholder text + (optional) hint Label using the current
-# query. Bash format: "(reverse-i-search)`query':"
+# Rebuild placeholder text using current query. Bash format: "(reverse-i-search)`query':"
 func _apply_reverse_search_placeholder() -> void:
 	if not is_instance_valid(input_line):
 		return
@@ -1459,10 +1331,8 @@ func _apply_reverse_search_placeholder() -> void:
 func _build_reverse_search_hint_text() -> String:
 	return "%s%s':" % [_REVERSE_SEARCH_PROMPT_PREFIX, _reverse_search_query]
 
-# Walks command_history backward from _reverse_search_index looking for
-# the most recent entry that contains _reverse_search_query (case-
-# insensitive). If found, sets input_line.text to that entry. Returns
-# true on hit, false on miss.
+# Walk command_history backward looking for most recent entry containing query (case-insensitive).
+# Return true on hit, false on miss.
 func _apply_reverse_search() -> bool:
 	if _reverse_search_query.is_empty() or command_history.is_empty():
 		return false
@@ -1480,9 +1350,7 @@ func _apply_reverse_search() -> bool:
 			return true
 	return false
 
-# Ctrl+R while already in reverse-search -> step to the next older match.
-# If no older match exists, leaves the current match displayed (bash beeps
-# in the terminal; we just no-op silently).
+# Ctrl+R in reverse-search: step to next older match. No-op if no older match found.
 func _step_reverse_search_older() -> bool:
 	if not _reverse_search_active or _reverse_search_query.is_empty():
 		return false
@@ -1492,14 +1360,8 @@ func _step_reverse_search_older() -> bool:
 	_reverse_search_index = saved
 	return false
 
-# Routes a key event while reverse-search is active. Bash semantics:
-#   Ctrl+R   -> step to next older match
-#   Ctrl+C   -> cancel (same as Esc)
-#   Esc      -> cancel, restore pre-input
-#   Enter    -> commit + execute the matched command
-#   Tab/<-/->/Home/End -> commit + exit, let arrow act on matched text
-#   Backspace -> trim one char from the query, re-search from newest
-#   Printable -> append to query, re-search from newest
+# Route key events in reverse-search mode. Ctrl+R step older, Ctrl+C/Esc cancel.
+# Enter commits; Tab/arrows/Home/End commit and exit. Backspace trims query.
 func _handle_reverse_search_key(key_event: InputEventKey) -> void:
 	var ctrl: bool = key_event.ctrl_pressed
 	if ctrl and key_event.keycode == KEY_R:
@@ -1542,26 +1404,15 @@ func _handle_reverse_search_key(key_event: InputEventKey) -> void:
 				_apply_reverse_search()
 				_apply_reverse_search_placeholder()
 
-# --- T5 readline shortcuts ---
-# Bash readline parity for word-level editing in the input line:
-#   Ctrl+W  - delete word backward (push into _kill_ring)
-#   Ctrl+K  - kill from caret to end of line (push into _kill_ring)
-#   Ctrl+Y  - yank the kill ring at the caret
-#   Alt+B   - move caret one word back (no deletion)
-#   Alt+F   - move caret one word forward (no deletion)
-# Word boundary chars include shell metas and the path separator so that
-# segmented paths like res://addons/debug_console/editor navigate
-# token-by-token. Whitespace is also a boundary; alphanumerics, dots,
-# underscores, hyphens, colons and quotes are treated as word-internal.
-
+# T5 readline: Ctrl+W delete word back, Ctrl+K kill to EOL, Ctrl+Y yank.
+# Alt+B/F move word back/forward. Word boundaries: whitespace + shell metas.
 const _T5_WORD_BOUNDARY_CHARS := " \t|><&;/"
 
 func _t5_is_word_boundary(ch: String) -> bool:
 	return ch.length() > 0 and _T5_WORD_BOUNDARY_CHARS.contains(ch)
 
 func _t5_word_back_index(text: String, caret: int) -> int:
-	# Mirror bash M-b / C-w: skip boundary chars left, then non-boundary
-	# chars left. Returns the column where the previous word begins.
+	# Skip boundary chars left, then non-boundary chars left.
 	var i: int = clamp(caret, 0, text.length())
 	while i > 0 and _t5_is_word_boundary(text.substr(i - 1, 1)):
 		i -= 1
@@ -1570,8 +1421,7 @@ func _t5_word_back_index(text: String, caret: int) -> int:
 	return i
 
 func _t5_word_forward_index(text: String, caret: int) -> int:
-	# Mirror bash M-f: skip boundary chars right, then non-boundary chars
-	# right. Returns the column at the end of the next word.
+	# Skip boundary chars right, then non-boundary chars right.
 	var n: int = text.length()
 	var i: int = clamp(caret, 0, n)
 	while i < n and _t5_is_word_boundary(text.substr(i, 1)):

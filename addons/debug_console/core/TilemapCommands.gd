@@ -570,8 +570,6 @@ func _color_path(s: String) -> String:
 func _color_number(s: String) -> String:
 	return "[color=%s]%s[/color]" % [_COLOR_NUMBER, s]
 
-# Alias to match the spec's "_color_num" helper name without breaking the
-# rest of this module that uses _color_number for readability.
 func _color_num(s: String) -> String:
 	return _color_number(s)
 
