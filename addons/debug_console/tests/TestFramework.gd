@@ -1504,9 +1504,17 @@ func run_builtin_commands_tests():
 
 	# --- W1 output renderer tests ---
 	test("JSON Command - Registration", func():
-		if not registry:
-			return false
-		return registry._commands.has("json")
+		# Use an isolated temp registry so we never mutate the live autoload
+		# (mutating it overwrites callables bound to the live plugin instance
+		# with callables bound to a transient one, which then gets GC'd and
+		# breaks subsequent tests). This proves the command is wired into
+		# register_universal_commands() without side effects.
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var commands = BuiltInCommands.new()
+		commands._registry = temp_registry
+		commands._core = Node.new()
+		commands.register_universal_commands()
+		return temp_registry._commands.has("json")
 	)
 
 	test("JSON Command - Pretty Prints Valid", func():
@@ -1557,9 +1565,13 @@ func run_builtin_commands_tests():
 	# (SceneTree debug flags), mark (sync marker), slowmo/freeze (time scale),
 	# physics_tps (tick rate), crashtest (assert validation).
 	test("Eval - Registration", func():
-		if not registry:
-			return false
-		return registry._commands.has("eval")
+		# Use an isolated temp registry: see JSON Command - Registration above.
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var commands = BuiltInCommands.new()
+		commands._registry = temp_registry
+		commands._core = Node.new()
+		commands.register_universal_commands()
+		return temp_registry._commands.has("eval")
 	)
 
 	test("Eval - Simple Arithmetic", func():
@@ -1581,9 +1593,14 @@ func run_builtin_commands_tests():
 	)
 
 	test("Perf - Registration", func():
-		if not registry:
-			return false
-		return registry._commands.has("perf")
+		# perf is "game" context; verify it appears in register_game_commands()
+		# using an isolated temp registry so the live autoload is untouched.
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var commands = BuiltInCommands.new()
+		commands._registry = temp_registry
+		commands._core = Node.new()
+		commands.register_game_commands()
+		return temp_registry._commands.has("perf")
 	)
 
 	test("Perf - Returns FPS Line", func():
@@ -1600,9 +1617,14 @@ func run_builtin_commands_tests():
 	)
 
 	test("Show Colliders - Registration", func():
-		if not registry:
-			return false
-		return registry._commands.has("show_colliders")
+		# show_colliders is "game" context; verify it appears in register_game_commands()
+		# using an isolated temp registry so the live autoload is untouched.
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var commands = BuiltInCommands.new()
+		commands._registry = temp_registry
+		commands._core = Node.new()
+		commands.register_game_commands()
+		return temp_registry._commands.has("show_colliders")
 	)
 
 	test("Show Colliders - Toggle Or Editor Guard", func():
@@ -1716,10 +1738,14 @@ func run_builtin_commands_tests():
 	)
 
 	test("Crashtest - Registration Only", func():
-		if not registry:
-			return false
+		# Isolated temp registry: see JSON Command - Registration above.
 		# Do NOT invoke _cmd_crashtest; assert(false) would halt the test runner.
-		return registry._commands.has("crashtest")
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var commands = BuiltInCommands.new()
+		commands._registry = temp_registry
+		commands._core = Node.new()
+		commands.register_universal_commands()
+		return temp_registry._commands.has("crashtest")
 	)
 	# --- end T5 new commands tests ---
 

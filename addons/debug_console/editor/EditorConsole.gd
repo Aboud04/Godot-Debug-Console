@@ -142,6 +142,11 @@ func _ready():
 	output_text.add_theme_color_override("default_color", Color("#E0E0E0"))
 	output_text.add_theme_color_override("font_color", Color("#E0E0E0"))
 	output_text.add_theme_font_size_override("normal_font_size", 13)
+	# Fix W1 overlap: at 13px font with default line_separation=0, log lines
+	# render with no vertical breathing room and overlap the BBCode color tags
+	# of the line below. 4px matches the visual spacing of bash/iTerm at this
+	# font size.
+	output_text.add_theme_constant_override("line_separation", 4)
 	var output_panel: Panel = output_text.get_parent() as Panel
 	if output_panel:
 		var sb := StyleBoxFlat.new()
