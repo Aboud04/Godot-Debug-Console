@@ -2135,6 +2135,116 @@ func run_builtin_commands_tests():
 	)
 	# --- end T6 external command module tests ---
 
+	# --- T7 external command module registration tests ---
+	# 11 new domain modules added in parallel. Each test uses the
+	# temp_registry pattern so the live autoload is never mutated.
+	# Sentinel commands picked for coverage: at least one command per
+	# module that ought to exist if register_commands ran end-to-end.
+	test("T7 Physics - Registers raycast + apply_force + collision_layers", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/PhysicsCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("raycast") and temp_registry._commands.has("apply_force") and temp_registry._commands.has("collision_layers")
+	)
+
+	test("T7 Animation - Registers anim_play + anim_stop + anim_list", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/AnimationCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("anim_play") and temp_registry._commands.has("anim_stop") and temp_registry._commands.has("anim_list")
+	)
+
+	test("T7 Camera - Registers cam_list + cam_pos + cam_shake", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/CameraCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("cam_list") and temp_registry._commands.has("cam_pos") and temp_registry._commands.has("cam_shake")
+	)
+
+	test("T7 Timer - Registers schedule + repeat + stopwatch", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/TimerCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("schedule") and temp_registry._commands.has("repeat") and temp_registry._commands.has("stopwatch")
+	)
+
+	test("T7 Prefab - Registers prefab_save + prefab_spawn + prefab_swarm", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/PrefabCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("prefab_save") and temp_registry._commands.has("prefab_spawn") and temp_registry._commands.has("prefab_swarm")
+	)
+
+	test("T7 Math - Registers rand + lerp_val + noise + vec", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/MathCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("rand") and temp_registry._commands.has("lerp_val") and temp_registry._commands.has("noise") and temp_registry._commands.has("vec")
+	)
+
+	test("T7 Dialog - Registers dialog_alert + dialog_confirm + dialog_input", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/DialogCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("dialog_alert") and temp_registry._commands.has("dialog_confirm") and temp_registry._commands.has("dialog_input")
+	)
+
+	test("T7 Particles - Registers particles_burst + particles_emit + particles_clear", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/ParticleCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("particles_burst") and temp_registry._commands.has("particles_emit") and temp_registry._commands.has("particles_clear")
+	)
+
+	test("T7 Data - Registers csv_read + json_read + table + query", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/DataCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("csv_read") and temp_registry._commands.has("json_read") and temp_registry._commands.has("table") and temp_registry._commands.has("query")
+	)
+
+	test("T7 Shader - Registers shader_load + shader_set + mat_new", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/ShaderCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("shader_load") and temp_registry._commands.has("shader_set") and temp_registry._commands.has("mat_new")
+	)
+
+	test("T7 Tilemap - Registers tile_set + tile_get + tile_fill", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/TilemapCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		return temp_registry._commands.has("tile_set") and temp_registry._commands.has("tile_get") and temp_registry._commands.has("tile_fill")
+	)
+
+	test("T7 All Modules Load Via Loader", func():
+		# Verify the BuiltInCommands T6/T7 loader picks up every module without
+		# crashing. We instantiate a fresh BuiltInCommands against a temp
+		# registry; if any module's class_name registration or class loading
+		# barfs, this throws during the loader's load().new() chain.
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var commands = BuiltInCommands.new()
+		commands._registry = temp_registry
+		commands._core = Node.new()
+		commands.register_universal_commands()
+		# After loading, temp_registry should have at minimum echo (BuiltInCommands)
+		# plus a sentinel from each T6/T7 module:
+		return temp_registry._commands.has("echo") \
+			and temp_registry._commands.has("spawn") \
+			and temp_registry._commands.has("raycast") \
+			and temp_registry._commands.has("anim_play") \
+			and temp_registry._commands.has("cam_list") \
+			and temp_registry._commands.has("schedule") \
+			and temp_registry._commands.has("prefab_save") \
+			and temp_registry._commands.has("rand") \
+			and temp_registry._commands.has("dialog_alert") \
+			and temp_registry._commands.has("particles_burst") \
+			and temp_registry._commands.has("csv_read") \
+			and temp_registry._commands.has("shader_load") \
+			and temp_registry._commands.has("tile_set")
+	)
+	# --- end T7 external command module registration tests ---
+
 func run_autocomplete_tests():
 	print("\nTesting Autocomplete...")
 	var registry := _registry()

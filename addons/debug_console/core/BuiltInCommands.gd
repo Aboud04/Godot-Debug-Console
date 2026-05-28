@@ -191,13 +191,37 @@ func register_universal_commands():
 	_registry.register_command("line_spacing", _cmd_line_spacing, "Get/set console line spacing in pixels: line_spacing [n] (0-40)", "both")
 	# T6 - Load external command modules (scene/runtime/UI). Modules are kept
 	# alive in a static array; on a fresh registry we re-register against it.
+	# T7 - Same pattern for the 11 new domain modules (physics/animation/camera/
+	# timer/prefab/math/dialog/particles/data/shader/tilemap). Each appends to
+	# the same array; the for-loop below re-registers all of them against the
+	# current _registry on every call to register_universal_commands.
 	if _t6_keepalive.is_empty():
-		var scene_module: RefCounted = load("res://addons/debug_console/core/SceneCommands.gd").new()
-		var runtime_module: RefCounted = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
-		var ui_module: RefCounted = load("res://addons/debug_console/core/UICommands.gd").new()
-		_t6_keepalive.append(scene_module)
-		_t6_keepalive.append(runtime_module)
-		_t6_keepalive.append(ui_module)
+		var module_paths: Array[String] = [
+			"res://addons/debug_console/core/SceneCommands.gd",
+			"res://addons/debug_console/core/RuntimeCommands.gd",
+			"res://addons/debug_console/core/UICommands.gd",
+			"res://addons/debug_console/core/PhysicsCommands.gd",
+			"res://addons/debug_console/core/AnimationCommands.gd",
+			"res://addons/debug_console/core/CameraCommands.gd",
+			"res://addons/debug_console/core/TimerCommands.gd",
+			"res://addons/debug_console/core/PrefabCommands.gd",
+			"res://addons/debug_console/core/MathCommands.gd",
+			"res://addons/debug_console/core/DialogCommands.gd",
+			"res://addons/debug_console/core/ParticleCommands.gd",
+			"res://addons/debug_console/core/DataCommands.gd",
+			"res://addons/debug_console/core/ShaderCommands.gd",
+			"res://addons/debug_console/core/TilemapCommands.gd",
+		]
+		for path in module_paths:
+			var script_res: GDScript = load(path) as GDScript
+			if script_res:
+				var module: RefCounted = script_res.new()
+				if module:
+					_t6_keepalive.append(module)
+				else:
+					push_error("Debug Console: %s loaded but .new() failed" % path)
+			else:
+				push_error("Debug Console: failed to load module %s" % path)
 	for module in _t6_keepalive:
 		if module and module.has_method("register_commands"):
 			module.register_commands(_registry, _core)
