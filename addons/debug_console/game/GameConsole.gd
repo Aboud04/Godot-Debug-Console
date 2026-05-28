@@ -107,6 +107,7 @@ func _command_registry() -> Node:
 
 func _ready():
 	set_process_mode(Node.PROCESS_MODE_ALWAYS)
+	add_to_group("GameConsole")  # Allows `font_size` command to locate us
 	
 	_setup_ui()
 	
@@ -145,12 +146,11 @@ func _setup_ui():
 	# color toward white and bump the base font size so logs read cleanly
 	# at 1080p without having to override every category color.
 	output_text.add_theme_color_override("default_color", Color("#F0F0F0"))
-	output_text.add_theme_font_size_override("normal_font_size", 14)
-	# Fix overlap: at 14px font with default line_separation=0, log lines
-	# render with no vertical breathing room and overlap the BBCode color tags
-	# of the line below. 5px (slightly more than editor since font is bigger)
-	# matches bash/iTerm spacing.
-	output_text.add_theme_constant_override("line_separation", 5)
+	# Bumped from 14 -> 16. Tunable at runtime via the `font_size` command.
+	output_text.add_theme_font_size_override("normal_font_size", 16)
+	# Bumped from 5 -> 12 (user screenshot still showed overlap at 5). 12 gives
+	# clear vertical separation at 16px font.
+	output_text.add_theme_constant_override("line_separation", 12)
 	
 	input_line.placeholder_text = "Enter command... (F12 to close)"
 	# W1: blinking caret so the input always feels "alive" - Godot defaults

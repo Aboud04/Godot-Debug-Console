@@ -55,6 +55,13 @@ func _ensure_dependencies() -> void:
 func register_editor_commands():
 	_ensure_dependencies()
 	register_universal_commands()
+	if not _registry:
+		return
+	# Transient-instance protection (see register_universal_commands for details).
+	if _registry._commands.has("ls"):
+		var existing_ls: Callable = _registry._commands["ls"].get("callable", Callable())
+		if existing_ls.is_valid() and existing_ls.get_object() != self:
+			return
 	
 	_registry.register_command("scene", _get_current_scene, "Get current scene info", "editor")
 	_registry.register_command("reload", _reload_scene, "Reload current scene", "editor")
@@ -106,6 +113,13 @@ func register_editor_commands():
 func register_game_commands():
 	_ensure_dependencies()
 	register_universal_commands()
+	if not _registry:
+		return
+	# Transient-instance protection (see register_universal_commands for details).
+	if _registry._commands.has("fps"):
+		var existing_fps: Callable = _registry._commands["fps"].get("callable", Callable())
+		if existing_fps.is_valid() and existing_fps.get_object() != self:
+			return
 	
 	_registry.register_command("fps", _show_fps, "Show FPS information", "game")
 	_registry.register_command("nodes", _count_nodes, "Count nodes in scene tree", "game")
@@ -124,6 +138,29 @@ func register_game_commands():
 
 func register_universal_commands():
 	_ensure_dependencies()
+	if not _registry:
+		return
+	# Transient-instance protection: if echo is already registered with a
+	# valid callable bound to a DIFFERENT live target (e.g. the persistent
+	# plugin instance), do not pollute the live registry with callables
+	# bound to this transient. The transient is about to be GC'd and its
+	# callables would become invalid, silently breaking ANY test that
+	# executes a universal command afterward (piping, autocomplete, etc).
+	# A fresh registry (plugin reload, autoload reset) has no echo, so this
+	# guard allows the legitimate first-time registration through. A re-call
+	# from the same persistent instance also passes through (target == self).
+	if _registry._commands.has("echo"):
+		var existing_echo: Callable = _registry._commands["echo"].get("callable", Callable())
+		if existing_echo.is_valid() and existing_echo.get_object() != self:
+			# Live registry already has this owner's universals. Skip overwriting
+			# them but DO refresh T6 modules - they're stable in _t6_keepalive
+			# so re-registration is cheap and idempotent.
+			for module in _t6_keepalive:
+				if module and module.has_method("register_commands"):
+					module.register_commands(_registry, _core)
+			_load_aliases_from_config()
+			_register_alias_commands()
+			return
 	_registry.register_command("test", _run_tests, "Run all tests", "both")
 	_registry.register_command("help", _help, "Show available commands", "both")
 	_registry.register_command("clear", _clear, "Clear console output", "both")
@@ -149,6 +186,8 @@ func register_universal_commands():
 	_registry.register_command("eval", _cmd_eval, "Evaluate a GDScript expression (sandboxed: no defs/assigns)", "both")
 	_registry.register_command("mark", _cmd_mark, "Print a colored timestamped marker for log syncing", "both")
 	_registry.register_command("crashtest", _cmd_crashtest, "Fire assert(false) to validate crash reporting", "both")
+	# Live font-size tuning (user feedback: default too small).
+	_registry.register_command("font_size", _cmd_font_size, "Get/set console font size: font_size [n] (8-32, default 15)", "both")
 	# T6 - Load external command modules (scene/runtime/UI). Modules are kept
 	# alive in a static array; on a fresh registry we re-register against it.
 	if _t6_keepalive.is_empty():
@@ -2681,5 +2720,72 @@ func _cmd_crashtest(args: Array) -> String:
 	assert(false, "crashtest fired via debug console")
 	return msg
 
-#endregion
+# Live font-size tuning for the console output panels. Walks both the editor
+# and game consoles if they're present, applies font_size + a proportional
+# line_separation so vertical breathing room scales with text height. Read-only
+# when called with no args.
+func _cmd_font_size(args: Array) -> String:
+	if args.is_empty():
+		var current_editor: int = _get_console_font_size("EditorConsole")
+		var current_game: int = _get_console_font_size("GameConsole")
+		var lines: Array[String] = []
+		if current_editor > 0:
+			lines.append("Editor console: %d px" % current_editor)
+		if current_game > 0:
+			lines.append("Game console: %d px" % current_game)
+		if lines.is_empty():
+			return "No console found to query."
+		return "\n".join(lines)
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_int():
+		return "Error: font_size takes an integer 8-32"
+	var n: int = raw.to_int()
+	if n < 8 or n > 32:
+		return "Error: font_size must be between 8 and 32 (got %d)" % n
+	var applied: Array[String] = []
+	if _apply_console_font_size("EditorConsole", n):
+		applied.append("editor")
+	if _apply_console_font_size("GameConsole", n):
+		applied.append("game")
+	if applied.is_empty():
+		return "Error: no console found to apply font_size to"
+	return "[color=#A0E0A0]Font size set to %d px (%s)[/color]" % [n, ", ".join(applied)]
 
+func _get_console_font_size(group_name: String) -> int:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return 0
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for n in nodes:
+		var out: Node = n.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = n.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out and out.has_theme_font_size_override("normal_font_size"):
+			return out.get_theme_font_size("normal_font_size")
+	return 0
+
+func _apply_console_font_size(group_name: String, n: int) -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return false
+	var any_applied: bool = false
+	# Per-spacing scale: line_separation roughly 2/3 of font_size keeps the
+	# bash-terminal feel across sizes without overspacing at high values.
+	var line_sep: int = max(4, int(round(float(n) * 0.66)))
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for node_ref in nodes:
+		var out: Node = node_ref.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = node_ref.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out:
+			out.add_theme_font_size_override("normal_font_size", n)
+			out.add_theme_constant_override("line_separation", line_sep)
+			any_applied = true
+		var input_node: Node = node_ref.get_node_or_null("VBox/InputContainer/InputLine")
+		if not input_node:
+			input_node = node_ref.get_node_or_null("VBox/InputLine")
+		if input_node and input_node is Control:
+			input_node.add_theme_font_size_override("font_size", n)
+	return any_applied
+
+#endregion
