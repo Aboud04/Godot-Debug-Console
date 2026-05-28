@@ -166,7 +166,7 @@ func _cmd_color_from_hex(args: Array, _piped_input: String = "") -> String:
 	if args.is_empty():
 		return _format_error("Usage: color_from_hex <hex>")
 	var raw := str(args[0]).strip_edges()
-	var c := _parse_hex(raw)
+	var c: Variant = _parse_hex(raw)
 	if c == null:
 		return _format_error("color_from_hex: invalid hex '%s'" % raw)
 	var col: Color = c
@@ -235,8 +235,8 @@ func _cmd_color_to_hex(args: Array, _piped_input: String = "") -> String:
 func _cmd_color_blend(args: Array, _piped_input: String = "") -> String:
 	if args.size() < 3:
 		return _format_error("Usage: color_blend <hex_a> <hex_b> <t>")
-	var a := _parse_hex(str(args[0]).strip_edges())
-	var b := _parse_hex(str(args[1]).strip_edges())
+	var a: Variant = _parse_hex(str(args[0]).strip_edges())
+	var b: Variant = _parse_hex(str(args[1]).strip_edges())
 	if a == null:
 		return _format_error("color_blend: invalid hex_a '%s'" % str(args[0]))
 	if b == null:
@@ -259,7 +259,7 @@ func _cmd_color_blend(args: Array, _piped_input: String = "") -> String:
 func _cmd_color_palette(args: Array, _piped_input: String = "") -> String:
 	if args.size() < 2:
 		return _format_error("Usage: color_palette <hex_a> <count>")
-	var base := _parse_hex(str(args[0]).strip_edges())
+	var base: Variant = _parse_hex(str(args[0]).strip_edges())
 	if base == null:
 		return _format_error("color_palette: invalid hex '%s'" % str(args[0]))
 	var count_token := str(args[1]).strip_edges()
@@ -286,8 +286,8 @@ func _cmd_color_palette(args: Array, _piped_input: String = "") -> String:
 func _cmd_color_contrast(args: Array, _piped_input: String = "") -> String:
 	if args.size() < 2:
 		return _format_error("Usage: color_contrast <hex_a> <hex_b>")
-	var a := _parse_hex(str(args[0]).strip_edges())
-	var b := _parse_hex(str(args[1]).strip_edges())
+	var a: Variant = _parse_hex(str(args[0]).strip_edges())
+	var b: Variant = _parse_hex(str(args[1]).strip_edges())
 	if a == null:
 		return _format_error("color_contrast: invalid hex_a '%s'" % str(args[0]))
 	if b == null:
@@ -347,7 +347,7 @@ func _parse_color_token(raw: String) -> Dictionary:
 	var token := raw.strip_edges()
 	if token.is_empty():
 		return {"ok": false, "color": Color.WHITE}
-	var hex := _parse_hex(token)
+	var hex: Variant = _parse_hex(token)
 	if hex != null:
 		return {"ok": true, "color": hex}
 	var lower := token.to_lower()

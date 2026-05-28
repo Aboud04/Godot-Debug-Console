@@ -47,7 +47,7 @@ class _AutoLogger extends Logger:
 	func bind(o: RefCounted) -> void:
 		_owner_ref = weakref(o)
 
-	func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int) -> void:
+	func _log_error(function: String, file: String, line: int, code: String, rationale: String, editor_notify: bool, error_type: int, script_backtraces: Array[ScriptBacktrace] = []) -> void:
 		if _owner_ref == null:
 			return
 		var owner: Object = _owner_ref.get_ref()

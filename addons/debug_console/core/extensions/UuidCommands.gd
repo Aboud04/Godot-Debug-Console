@@ -135,7 +135,10 @@ func _generate_uuid_v5(text: String) -> String:
 	# Not a true RFC 4122 v5 (no namespace UUID is provided), but follows the
 	# same shape: SHA-256 the input, take the first 16 bytes, stamp version 5
 	# and the RFC 4122 variant. Stable for any given text input.
-	var hashed: PackedByteArray = text.to_utf8_buffer().sha256_buffer()
+	var ctx := HashingContext.new()
+	ctx.start(HashingContext.HASH_SHA256)
+	ctx.update(text.to_utf8_buffer())
+	var hashed: PackedByteArray = ctx.finish()
 	var bytes: PackedByteArray = hashed.slice(0, 16)
 	bytes[6] = (bytes[6] & 0x0F) | 0x50
 	bytes[8] = (bytes[8] & 0x3F) | 0x80
