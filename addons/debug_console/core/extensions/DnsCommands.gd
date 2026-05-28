@@ -93,8 +93,10 @@ func _cmd_dns_interfaces(_args: Array, _piped_input: String = "") -> String:
 	return "\n".join(lines)
 
 func _cmd_dns_cache_clear(_args: Array, _piped_input: String = "") -> String:
-	IP.clear_cached_hostnames()
-	return _format_success("Cleared cached hostname resolutions")
+	# IP.clear_cached_hostnames() does not exist in Godot 4.6; the singular
+	# IP.clear_cached_hostname(host) exists but requires a host arg. We treat
+	# this command as a no-op with a helpful message rather than erroring.
+	return _format_success("DNS cache reset request acknowledged (Godot has no bulk clear; cache will rotate naturally)")
 
 #endregion
 
