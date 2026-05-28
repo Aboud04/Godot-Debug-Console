@@ -187,23 +187,31 @@ func register_universal_commands():
 	# timer/prefab/math/dialog/particles/data/shader/tilemap). Each appends to
 	# the same array; the for-loop below re-registers all of them against the
 	# current _registry on every call to register_universal_commands.
-	if _t6_keepalive.is_empty():
-		var module_paths: Array[String] = [
-			"res://addons/debug_console/core/SceneCommands.gd",
-			"res://addons/debug_console/core/RuntimeCommands.gd",
-			"res://addons/debug_console/core/UICommands.gd",
-			"res://addons/debug_console/core/PhysicsCommands.gd",
-			"res://addons/debug_console/core/AnimationCommands.gd",
-			"res://addons/debug_console/core/CameraCommands.gd",
-			"res://addons/debug_console/core/TimerCommands.gd",
-			"res://addons/debug_console/core/PrefabCommands.gd",
-			"res://addons/debug_console/core/MathCommands.gd",
-			"res://addons/debug_console/core/DialogCommands.gd",
-			"res://addons/debug_console/core/ParticleCommands.gd",
-			"res://addons/debug_console/core/DataCommands.gd",
-			"res://addons/debug_console/core/ShaderCommands.gd",
-			"res://addons/debug_console/core/TilemapCommands.gd",
-		]
+	#
+	# Hot-reload guard: the static _t6_keepalive can survive a script reload
+	# with a stale subset of modules (e.g. only the 3 T6 modules from a
+	# previous plugin generation). We detect that by comparing sizes against
+	# the canonical module_paths list and clear+reload if they mismatch.
+	# Without this guard, the live registry would silently miss the T7 module
+	# commands after any hot-reload that happened between T6 and T7 ship.
+	var module_paths: Array[String] = [
+		"res://addons/debug_console/core/SceneCommands.gd",
+		"res://addons/debug_console/core/RuntimeCommands.gd",
+		"res://addons/debug_console/core/UICommands.gd",
+		"res://addons/debug_console/core/PhysicsCommands.gd",
+		"res://addons/debug_console/core/AnimationCommands.gd",
+		"res://addons/debug_console/core/CameraCommands.gd",
+		"res://addons/debug_console/core/TimerCommands.gd",
+		"res://addons/debug_console/core/PrefabCommands.gd",
+		"res://addons/debug_console/core/MathCommands.gd",
+		"res://addons/debug_console/core/DialogCommands.gd",
+		"res://addons/debug_console/core/ParticleCommands.gd",
+		"res://addons/debug_console/core/DataCommands.gd",
+		"res://addons/debug_console/core/ShaderCommands.gd",
+		"res://addons/debug_console/core/TilemapCommands.gd",
+	]
+	if _t6_keepalive.size() != module_paths.size():
+		_t6_keepalive.clear()
 		for path in module_paths:
 			var script_res: GDScript = load(path) as GDScript
 			if script_res:
