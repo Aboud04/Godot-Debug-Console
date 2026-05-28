@@ -7,14 +7,14 @@ class_name DebugConsoleStackTraceCommands extends RefCounted
 # register_commands(registry, core). All commands register with the "both"
 # context so they work from the editor dock and the in-game overlay.
 #
-# Note on availability: Engine.get_stack() returns frames only when the
+# Note on availability: get_stack() returns frames only when the
 # script debugger is connected. In editor and in any debug build with
 # Project Settings -> Network/Debug enabled this is the case; in release
 # (exported) builds get_stack() returns an empty array. All commands here
 # fail soft with a clear message when that happens.
 #
 # Commands provided:
-#   stacktrace      dump Engine.get_stack() with optional depth
+#   stacktrace      dump get_stack() with optional depth
 #   stacktrace_at   arm a one-shot hook that prints the stack the next
 #                   time <node_path>.<method> executes (output -> stdout)
 #   caller          immediate caller frame (function + file:line)
@@ -50,9 +50,9 @@ func register_commands(registry: Node, core: Node) -> void:
 #region Command implementations
 
 func _cmd_stacktrace(args: Array, piped_input: String = "") -> String:
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	if stack.is_empty():
-		return _format_error("Stack unavailable. Engine.get_stack() returned empty (requires a debug build with the script debugger active).")
+		return _format_error("Stack unavailable. get_stack() returned empty (requires a debug build with the script debugger active).")
 	var depth: int = stack.size()
 	if not args.is_empty():
 		var d := str(args[0]).strip_edges()
@@ -69,15 +69,15 @@ func _cmd_frames(args: Array, piped_input: String = "") -> String:
 		var v := str(args[0]).strip_edges()
 		if v.is_valid_int():
 			n = max(1, v.to_int())
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	if stack.is_empty():
-		return _format_error("Stack unavailable (Engine.get_stack() returned empty).")
+		return _format_error("Stack unavailable (get_stack() returned empty).")
 	return _format_stack(stack, n, "frames (last %s)" % _color_number(str(n)))
 
 func _cmd_where(args: Array, piped_input: String = "") -> String:
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	if stack.is_empty():
-		return _format_error("Stack unavailable (Engine.get_stack() returned empty).")
+		return _format_error("Stack unavailable (get_stack() returned empty).")
 	var f: Dictionary = stack[0]
 	return "%s:%s in %s" % [
 		_color_path(str(f.get("source", "?"))),
@@ -86,7 +86,7 @@ func _cmd_where(args: Array, piped_input: String = "") -> String:
 	]
 
 func _cmd_caller(args: Array, piped_input: String = "") -> String:
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	if stack.size() < 2:
 		return _format_error("No caller frame available (stack depth %s)." % _color_number(str(stack.size())))
 	var f: Dictionary = stack[1]
@@ -97,7 +97,7 @@ func _cmd_caller(args: Array, piped_input: String = "") -> String:
 	]
 
 func _cmd_print_stack(args: Array, piped_input: String = "") -> String:
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	print_stack()
 	return _format_success("print_stack() emitted to stdout (%s frame(s))." % _color_number(str(stack.size())))
 
@@ -120,7 +120,7 @@ func _cmd_script_self(args: Array, piped_input: String = "") -> String:
 	lines.append("  registry: %s" % _color_path(registry_label))
 	lines.append("  core: %s" % _color_path(core_label))
 	lines.append("  active_hooks: %s" % _color_number(str(_hooks.size())))
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	if not stack.is_empty():
 		var top: Dictionary = stack[0]
 		lines.append("  invoked_from: %s:%s in %s" % [
@@ -172,7 +172,7 @@ func _cmd_stacktrace_at(args: Array, piped_input: String = "") -> String:
 	])
 
 func _poll_stack_hook(hook: Dictionary) -> void:
-	var stack: Array = Engine.get_stack()
+	var stack: Array = get_stack()
 	if stack.is_empty():
 		return
 	var method: String = str(hook.get("method", ""))
