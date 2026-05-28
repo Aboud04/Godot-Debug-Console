@@ -149,6 +149,18 @@ func register_universal_commands():
 	_registry.register_command("eval", _cmd_eval, "Evaluate a GDScript expression (sandboxed: no defs/assigns)", "both")
 	_registry.register_command("mark", _cmd_mark, "Print a colored timestamped marker for log syncing", "both")
 	_registry.register_command("crashtest", _cmd_crashtest, "Fire assert(false) to validate crash reporting", "both")
+	# T6 - Load external command modules (scene/runtime/UI). Modules are kept
+	# alive in a static array; on a fresh registry we re-register against it.
+	if _t6_keepalive.is_empty():
+		var scene_module: RefCounted = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var runtime_module: RefCounted = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var ui_module: RefCounted = load("res://addons/debug_console/core/UICommands.gd").new()
+		_t6_keepalive.append(scene_module)
+		_t6_keepalive.append(runtime_module)
+		_t6_keepalive.append(ui_module)
+	for module in _t6_keepalive:
+		if module and module.has_method("register_commands"):
+			module.register_commands(_registry, _core)
 	_load_aliases_from_config()
 	_register_alias_commands()
 
@@ -617,6 +629,16 @@ func _refresh_filesystem(args: Array) -> String:
 var current_directory: String = "res://"
 
 static var global_current_directory: String = "res://"
+
+# T6 - keepalive for external command modules (SceneCommands, RuntimeCommands,
+# UICommands). Each module is RefCounted and registers Callables bound to
+# itself. If we stored these on the instance, a transient BuiltInCommands.new()
+# would let the modules GC after register_universal_commands() returns,
+# silently invalidating every registered Callable. The static array survives
+# transient instances and survives autoload reload, while a fresh registry
+# still gets re-registered on the next call (modules are stateless w.r.t.
+# the registry identity).
+static var _t6_keepalive: Array = []
 
 static func get_current_directory() -> String:
 	return global_current_directory

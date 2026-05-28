@@ -1749,6 +1749,392 @@ func run_builtin_commands_tests():
 	)
 	# --- end T5 new commands tests ---
 
+	# --- T6 external command module tests (scene/runtime/UI) ---
+	# These verify the three new modules (SceneCommands, RuntimeCommands,
+	# UICommands) register and behave correctly when invoked through their
+	# own instances. We use the temp_registry pattern for registration
+	# checks so live state is never mutated, and direct method calls for
+	# behavior checks so we don't depend on the live registry's freshness.
+	test("T6 Scene Commands - All Registered", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		var expected: Array = [
+			"spawn", "instance_scene", "create_node", "delete_node", "reparent",
+			"duplicate_node", "call", "methods", "class_db", "signal_emit",
+			"signal_connect", "signal_disconnect", "tween", "find_node", "count_nodes",
+		]
+		for cmd_name in expected:
+			if not temp_registry._commands.has(cmd_name):
+				return false
+		return true
+	)
+
+	test("T6 Scene Commands - Create Node Behavior", func():
+		if Engine.is_editor_hint():
+			return true
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var container := Node.new()
+		container.name = "T6CreateContainer"
+		tree.root.add_child(container)
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_create_node(["Label", "/root/T6CreateContainer", "MyLabel"])
+		var ok: bool = container.get_node_or_null("MyLabel") != null and result.contains("MyLabel")
+		container.queue_free()
+		return ok
+	)
+
+	test("T6 Scene Commands - Create Node Rejects Bad Class", func():
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_create_node(["NotARealClass"])
+		return result.contains("Error") and result.contains("Unknown class")
+	)
+
+	test("T6 Scene Commands - Delete Refuses Root", func():
+		if Engine.is_editor_hint():
+			return true
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_delete_node(["/root"])
+		return result.contains("Error") and result.contains("Refusing")
+	)
+
+	test("T6 Scene Commands - Call Returns Method Result", func():
+		if Engine.is_editor_hint():
+			return true
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var n := Node.new()
+		n.name = "T6CallNode"
+		tree.root.add_child(n)
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_call(["/root/T6CallNode.get_name"])
+		var ok: bool = result.contains("T6CallNode")
+		n.queue_free()
+		return ok
+	)
+
+	test("T6 Scene Commands - Class DB Dump Has Sections", func():
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_class_db(["Node"])
+		return result.contains("=== Node ===") and result.contains("Methods:") and result.contains("Signals:")
+	)
+
+	test("T6 Scene Commands - Class DB Unknown Errors", func():
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_class_db(["DefinitelyNotAClass"])
+		return result.contains("Error") and result.contains("Unknown class")
+	)
+
+	test("T6 Scene Commands - Find Node Glob Match", func():
+		if Engine.is_editor_hint():
+			return true
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var container := Node.new()
+		container.name = "T6FindContainer"
+		tree.root.add_child(container)
+		var a := Node.new(); a.name = "Foo1"; container.add_child(a)
+		var b := Node.new(); b.name = "Foo2"; container.add_child(b)
+		var c := Node.new(); c.name = "Bar"; container.add_child(c)
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_find_node(["Foo*", "/root/T6FindContainer"])
+		var ok: bool = result.contains("Foo1") and result.contains("Foo2") and not result.contains("Bar")
+		container.queue_free()
+		return ok
+	)
+
+	test("T6 Scene Commands - Count Nodes Reports Total", func():
+		if Engine.is_editor_hint():
+			return true
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var container := Node.new()
+		container.name = "T6CountContainer"
+		tree.root.add_child(container)
+		container.add_child(Node.new())
+		container.add_child(Node.new())
+		var label := Label.new()
+		container.add_child(label)
+		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
+		var result: String = cmds._cmd_count_nodes(["/root/T6CountContainer"])
+		var ok: bool = result.contains("Total:") and result.contains("Node") and result.contains("Label")
+		container.queue_free()
+		return ok
+	)
+
+	test("T6 Runtime Commands - All Registered", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		var expected: Array = [
+			"input_action", "input_dump", "bind", "unbind", "step",
+			"viewport", "fullscreen", "assets", "find_asset", "goto_scene",
+			"save_world", "load_world", "tick_rate", "vsync", "audio_bus",
+		]
+		for cmd_name in expected:
+			if not temp_registry._commands.has(cmd_name):
+				return false
+		return true
+	)
+
+	test("T6 Runtime Commands - input_dump Returns String", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var result: String = cmds._cmd_input_dump([])
+		return not result.is_empty()
+	)
+
+	test("T6 Runtime Commands - bind/unbind Roundtrip", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var test_action: String = "__t6_test_action__"
+		if InputMap.has_action(test_action):
+			InputMap.erase_action(test_action)
+		var bind_out: String = cmds._cmd_bind([test_action, "F12"])
+		var has_after_bind: bool = InputMap.has_action(test_action) and InputMap.action_get_events(test_action).size() == 1
+		var unbind_out: String = cmds._cmd_unbind([test_action])
+		var empty_after_unbind: bool = InputMap.action_get_events(test_action).size() == 0
+		InputMap.erase_action(test_action)
+		return bind_out.contains("F12") and has_after_bind and empty_after_unbind and unbind_out.contains("Cleared")
+	)
+
+	test("T6 Runtime Commands - bind Parses Modifier Spec", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var test_action: String = "__t6_modifier_test__"
+		if InputMap.has_action(test_action):
+			InputMap.erase_action(test_action)
+		cmds._cmd_bind([test_action, "Ctrl+Shift+P"])
+		var events: Array[InputEvent] = InputMap.action_get_events(test_action)
+		var ok: bool = false
+		if events.size() == 1 and events[0] is InputEventKey:
+			var ek := events[0] as InputEventKey
+			ok = ek.ctrl_pressed and ek.shift_pressed and not ek.alt_pressed
+		InputMap.erase_action(test_action)
+		return ok
+	)
+
+	test("T6 Runtime Commands - assets Returns Results", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var result: String = cmds._cmd_assets([])
+		return result.contains("Assets in res://") and result.contains(".gd")
+	)
+
+	test("T6 Runtime Commands - find_asset Glob Matches", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var result: String = cmds._cmd_find_asset(["*RuntimeCommands*"])
+		return result.contains("RuntimeCommands.gd")
+	)
+
+	test("T6 Runtime Commands - find_asset No Match", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var result: String = cmds._cmd_find_asset(["*__zzz_no_such_asset__*"])
+		return result.to_lower().contains("no assets matched") or result.to_lower().contains("no matches")
+	)
+
+	test("T6 Runtime Commands - tick_rate Reports And Rejects Out Of Range", func():
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var report: String = cmds._cmd_tick_rate([])
+		var range_err: String = cmds._cmd_tick_rate(["9999"])
+		return report.contains("Tick rate:") and range_err.to_lower().contains("must be 1-1000")
+	)
+
+	test("T6 Runtime Commands - vsync Reports State", func():
+		if Engine.is_editor_hint():
+			return true
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var result: String = cmds._cmd_vsync([])
+		return result.to_lower().contains("vsync:")
+	)
+
+	test("T6 Runtime Commands - audio_bus Lists Master", func():
+		if Engine.is_editor_hint():
+			return true
+		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
+		var result: String = cmds._cmd_audio_bus([])
+		return result.contains("Master")
+	)
+
+	test("T6 UI Commands - All Registered", func():
+		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		cmds.register_commands(temp_registry, null)
+		var expected: Array = [
+			"ui_panel", "ui_label", "ui_button", "ui_vbox", "ui_hbox",
+			"ui_grid", "ui_layout", "ui_text_color", "ui_size", "ui_anchor",
+			"ui_clear", "ui_dump", "ui_modal",
+		]
+		for cmd_name in expected:
+			if not temp_registry._commands.has(cmd_name):
+				return false
+		return true
+	)
+
+	test("T6 UI Commands - ui_panel Spawns PanelContainer", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Node.new()
+		parent.name = "T6PanelParent"
+		tree.root.add_child(parent)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_panel(["TestPanel", str(parent.get_path())])
+		var spawned = parent.get_node_or_null("TestPanel")
+		var ok: bool = spawned != null and spawned is PanelContainer
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_label Spawns With Text", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Node.new()
+		parent.name = "T6LabelParent"
+		tree.root.add_child(parent)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_label(["Hello", str(parent.get_path()), "Greeting"])
+		var spawned = parent.get_node_or_null("Greeting")
+		var ok: bool = spawned != null and spawned is Label and spawned.text == "Hello"
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_button Spawns With Text", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Node.new()
+		parent.name = "T6BtnParent"
+		tree.root.add_child(parent)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_button(["Click", str(parent.get_path()), "Btn"])
+		var spawned = parent.get_node_or_null("Btn")
+		var ok: bool = spawned != null and spawned is Button and spawned.text == "Click"
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_vbox Spawns VBoxContainer", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Node.new()
+		parent.name = "T6VBoxParent"
+		tree.root.add_child(parent)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_vbox([str(parent.get_path()), "MyVBox"])
+		var spawned = parent.get_node_or_null("MyVBox")
+		var ok: bool = spawned != null and spawned is VBoxContainer
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_grid Sets Columns", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Node.new()
+		parent.name = "T6GridParent"
+		tree.root.add_child(parent)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_grid(["3", str(parent.get_path()), "MyGrid"])
+		var spawned = parent.get_node_or_null("MyGrid")
+		var ok: bool = spawned != null and spawned is GridContainer and spawned.columns == 3
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_layout Applies Full Rect Preset", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Control.new()
+		parent.name = "T6LayoutParent"
+		tree.root.add_child(parent)
+		var ctrl := Control.new()
+		ctrl.name = "Target"
+		parent.add_child(ctrl)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_layout([str(ctrl.get_path()), "full_rect"])
+		var ok: bool = is_equal_approx(ctrl.anchor_left, 0.0) and is_equal_approx(ctrl.anchor_top, 0.0) \
+			and is_equal_approx(ctrl.anchor_right, 1.0) and is_equal_approx(ctrl.anchor_bottom, 1.0)
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_text_color Sets font_color Override", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Control.new()
+		parent.name = "T6TextColorParent"
+		tree.root.add_child(parent)
+		var label := Label.new()
+		label.name = "L"
+		parent.add_child(label)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_text_color([str(label.get_path()), "#FF0000"])
+		var ok: bool = label.has_theme_color_override("font_color") \
+			and label.get_theme_color("font_color").is_equal_approx(Color(1, 0, 0, 1))
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_size Sets custom_minimum_size", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Control.new()
+		parent.name = "T6SizeParent"
+		tree.root.add_child(parent)
+		var ctrl := Control.new()
+		ctrl.name = "Sized"
+		parent.add_child(ctrl)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_size([str(ctrl.get_path()), "200x100"])
+		var ok: bool = ctrl.custom_minimum_size.is_equal_approx(Vector2(200, 100))
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_anchor Parses Four Floats", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Control.new()
+		parent.name = "T6AnchorParent"
+		tree.root.add_child(parent)
+		var ctrl := Control.new()
+		ctrl.name = "Anchored"
+		parent.add_child(ctrl)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var _r: String = cmds._cmd_ui_anchor([str(ctrl.get_path()), "0.1,0.2,0.8,0.9"])
+		var ok: bool = is_equal_approx(ctrl.anchor_left, 0.1) and is_equal_approx(ctrl.anchor_top, 0.2) \
+			and is_equal_approx(ctrl.anchor_right, 0.8) and is_equal_approx(ctrl.anchor_bottom, 0.9)
+		parent.queue_free()
+		return ok
+	)
+
+	test("T6 UI Commands - ui_dump Returns Non-Empty Tree", func():
+		var tree := Engine.get_main_loop() as SceneTree
+		if not tree:
+			return false
+		var parent := Node.new()
+		parent.name = "T6DumpParent"
+		tree.root.add_child(parent)
+		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
+		var parent_path: String = str(parent.get_path())
+		cmds._cmd_ui_label(["A", parent_path, "DumpedLabel"])
+		var dump: String = cmds._cmd_ui_dump([parent_path])
+		var ok: bool = not dump.is_empty() and dump.contains("DumpedLabel") and dump.contains("Label")
+		parent.queue_free()
+		return ok
+	)
+	# --- end T6 external command module tests ---
+
 func run_autocomplete_tests():
 	print("\nTesting Autocomplete...")
 	var registry := _registry()
