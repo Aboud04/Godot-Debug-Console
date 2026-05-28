@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleCameraCommands extends RefCounted
 
-# Tier 7 - live camera control commands. Mirrors the same module shape as
+# Live camera control commands. Mirrors the same module shape as
 # SceneCommands / UICommands / RuntimeCommands: the orchestrator
 # (BuiltInCommands.register_universal_commands) instantiates one of these,
 # keeps a strong reference, and calls register_commands(registry, core).

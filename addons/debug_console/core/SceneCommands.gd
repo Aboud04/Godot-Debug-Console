@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleSceneCommands extends RefCounted
 
-# Tier 6 - live scene/node manipulation commands. This module ships separately
+# Live scene/node manipulation commands. This module ships separately
 # from BuiltInCommands.gd to keep that file under control as the command
 # surface grows. The orchestrator (BuiltInCommands.register_universal_commands)
 # instantiates one of these, holds a strong reference to it, and calls

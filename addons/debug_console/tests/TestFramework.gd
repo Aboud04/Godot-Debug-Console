@@ -146,7 +146,7 @@ func run_command_registry_tests():
 		return result.contains("test_function called with: hello")
 	)
 
-	# --- T4 plugin API tests ---
+	# --- plugin API tests ---
 	# These exercise the public DebugConsole autoload + the ConsoleCommand
 	# Resource. Both editor and runtime modes are valid since the autoload
 	# registers in both contexts via plugin.gd.
@@ -160,7 +160,7 @@ func run_command_registry_tests():
 		var api := _debug_console_api()
 		if not api:
 			return false
-		var ok: bool = api.register_command("t4test_cmd", Callable(self, "_test_function"), "T4 test", "both")
+		var ok: bool = api.register_command("t4test_cmd", Callable(self, "_test_function"), "test", "both")
 		var present: bool = api.has_command("t4test_cmd")
 		api.unregister_command("t4test_cmd")
 		return ok and present
@@ -171,7 +171,7 @@ func run_command_registry_tests():
 		var api := _debug_console_api()
 		if not api:
 			return false
-		api.register_command("t4test_unreg", Callable(self, "_test_function"), "T4 test", "both")
+		api.register_command("t4test_unreg", Callable(self, "_test_function"), "test", "both")
 		var unregistered: bool = api.unregister_command("t4test_unreg")
 		var still_present: bool = api.has_command("t4test_unreg")
 		return unregistered and not still_present
@@ -181,8 +181,8 @@ func run_command_registry_tests():
 		var api := _debug_console_api()
 		if not api:
 			return false
-		var first: bool = api.register_command("t4test_dup", Callable(self, "_test_function"), "T4 test", "both")
-		var second: bool = api.register_command("t4test_dup", Callable(self, "_test_function"), "T4 test", "both")
+		var first: bool = api.register_command("t4test_dup", Callable(self, "_test_function"), "test", "both")
+		var second: bool = api.register_command("t4test_dup", Callable(self, "_test_function"), "test", "both")
 		api.unregister_command("t4test_dup")
 		return first and not second
 	)
@@ -191,8 +191,8 @@ func run_command_registry_tests():
 		var api := _debug_console_api()
 		if not api:
 			return false
-		var ok: bool = api.register_command("", Callable(self, "_test_function"), "T4 test", "both")
-		var ok_whitespace: bool = api.register_command("   ", Callable(self, "_test_function"), "T4 test", "both")
+		var ok: bool = api.register_command("", Callable(self, "_test_function"), "test", "both")
+		var ok_whitespace: bool = api.register_command("   ", Callable(self, "_test_function"), "test", "both")
 		return not ok and not ok_whitespace
 	)
 
@@ -204,7 +204,7 @@ func run_command_registry_tests():
 		var handler := func(cmd_name: String):
 			captured.append(cmd_name)
 		api.command_registered.connect(handler)
-		var ok: bool = api.register_command("t4test_signal", Callable(self, "_test_function"), "T4 test", "both")
+		var ok: bool = api.register_command("t4test_signal", Callable(self, "_test_function"), "test", "both")
 		api.command_registered.disconnect(handler)
 		api.unregister_command("t4test_signal")
 		return ok and captured.size() == 1 and captured[0] == "t4test_signal"
@@ -792,7 +792,7 @@ func run_builtin_commands_tests():
 			return result.contains("[color=") and not result.contains("Error")
 		)
 		
-		# --- T2.2 output renderer tests ---
+		# --- output renderer tests ---
 		test("Built-in Commands - ls -l Produces Table", func():
 			var commands = BuiltInCommands.new()
 			var result: String = commands._list_files(["-l"], "", false)
@@ -1060,7 +1060,7 @@ func run_builtin_commands_tests():
 			return result.contains("Time scale set to: 2.0")
 		)
 
-		# --- T2.3 opacity + intercept commands ---
+		# --- opacity + intercept commands ---
 		# opacity is registered inside register_game_commands(), which the
 		# GameConsoleManager calls on startup in runtime mode. Editor mode
 		# never registers game commands, hence the runtime-only gate.
@@ -1274,7 +1274,7 @@ func run_builtin_commands_tests():
 	)
 	# --- end regression tests ---
 
-	# --- T3.1 new commands tests ---
+	# --- new commands tests ---
 	test("Tree Command - Registration", func():
 		if not Engine.is_editor_hint():
 			return true  # editor-only
@@ -1407,7 +1407,7 @@ func run_builtin_commands_tests():
 	)
 	# --- end T3.1 new commands tests ---
 
-	# --- T3.3 persistence tests ---
+	# --- persistence tests ---
 	# All persistence tests use per-test unique paths in user:// (via the
 	# history_path / state_path overrides on DebugConsolePersistenceManager) so
 	# they never trample the real user's debug_console_history.json or
@@ -1502,7 +1502,7 @@ func run_builtin_commands_tests():
 	)
 	# --- end T3.3 persistence tests ---
 
-	# --- W1 output renderer tests ---
+	# --- output renderer tests ---
 	test("JSON Command - Registration", func():
 		# Use an isolated temp registry so we never mutate the live autoload
 		# (mutating it overwrites callables bound to the live plugin instance
@@ -1560,7 +1560,7 @@ func run_builtin_commands_tests():
 	)
 	# --- end W1 output renderer tests ---
 
-	# --- T5 new commands tests ---
+	# --- new commands tests ---
 	# eval (Expression-based REPL), perf (Performance.Monitor dashboard), show_*
 	# (SceneTree debug flags), mark (sync marker), slowmo/freeze (time scale),
 	# physics_tps (tick rate), crashtest (assert validation).
@@ -1749,13 +1749,13 @@ func run_builtin_commands_tests():
 	)
 	# --- end T5 new commands tests ---
 
-	# --- T6 external command module tests (scene/runtime/UI) ---
+	# --- external command module tests (scene/runtime/UI) ---
 	# These verify the three new modules (SceneCommands, RuntimeCommands,
 	# UICommands) register and behave correctly when invoked through their
 	# own instances. We use the temp_registry pattern for registration
 	# checks so live state is never mutated, and direct method calls for
 	# behavior checks so we don't depend on the live registry's freshness.
-	test("T6 Scene Commands - All Registered", func():
+	test("Scene Commands - All Registered", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
@@ -1770,7 +1770,7 @@ func run_builtin_commands_tests():
 		return true
 	)
 
-	test("T6 Scene Commands - Create Node Behavior", func():
+	test("Scene Commands - Create Node Behavior", func():
 		if Engine.is_editor_hint():
 			return true
 		var tree := Engine.get_main_loop() as SceneTree
@@ -1786,13 +1786,13 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 Scene Commands - Create Node Rejects Bad Class", func():
+	test("Scene Commands - Create Node Rejects Bad Class", func():
 		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
 		var result: String = cmds._cmd_create_node(["NotARealClass"])
 		return result.contains("Error") and result.contains("Unknown class")
 	)
 
-	test("T6 Scene Commands - Delete Refuses Root", func():
+	test("Scene Commands - Delete Refuses Root", func():
 		if Engine.is_editor_hint():
 			return true
 		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
@@ -1800,7 +1800,7 @@ func run_builtin_commands_tests():
 		return result.contains("Error") and result.contains("Refusing")
 	)
 
-	test("T6 Scene Commands - Call Returns Method Result", func():
+	test("Scene Commands - Call Returns Method Result", func():
 		if Engine.is_editor_hint():
 			return true
 		var tree := Engine.get_main_loop() as SceneTree
@@ -1816,19 +1816,19 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 Scene Commands - Class DB Dump Has Sections", func():
+	test("Scene Commands - Class DB Dump Has Sections", func():
 		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
 		var result: String = cmds._cmd_class_db(["Node"])
 		return result.contains("=== Node ===") and result.contains("Methods:") and result.contains("Signals:")
 	)
 
-	test("T6 Scene Commands - Class DB Unknown Errors", func():
+	test("Scene Commands - Class DB Unknown Errors", func():
 		var cmds = load("res://addons/debug_console/core/SceneCommands.gd").new()
 		var result: String = cmds._cmd_class_db(["DefinitelyNotAClass"])
 		return result.contains("Error") and result.contains("Unknown class")
 	)
 
-	test("T6 Scene Commands - Find Node Glob Match", func():
+	test("Scene Commands - Find Node Glob Match", func():
 		if Engine.is_editor_hint():
 			return true
 		var tree := Engine.get_main_loop() as SceneTree
@@ -1847,7 +1847,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 Scene Commands - Count Nodes Reports Total", func():
+	test("Scene Commands - Count Nodes Reports Total", func():
 		if Engine.is_editor_hint():
 			return true
 		var tree := Engine.get_main_loop() as SceneTree
@@ -1867,7 +1867,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 Runtime Commands - All Registered", func():
+	test("Runtime Commands - All Registered", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
@@ -1882,13 +1882,13 @@ func run_builtin_commands_tests():
 		return true
 	)
 
-	test("T6 Runtime Commands - input_dump Returns String", func():
+	test("Runtime Commands - input_dump Returns String", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var result: String = cmds._cmd_input_dump([])
 		return not result.is_empty()
 	)
 
-	test("T6 Runtime Commands - bind/unbind Roundtrip", func():
+	test("Runtime Commands - bind/unbind Roundtrip", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var test_action: String = "__t6_test_action__"
 		if InputMap.has_action(test_action):
@@ -1901,7 +1901,7 @@ func run_builtin_commands_tests():
 		return bind_out.contains("F12") and has_after_bind and empty_after_unbind and unbind_out.contains("Cleared")
 	)
 
-	test("T6 Runtime Commands - bind Parses Modifier Spec", func():
+	test("Runtime Commands - bind Parses Modifier Spec", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var test_action: String = "__t6_modifier_test__"
 		if InputMap.has_action(test_action):
@@ -1916,32 +1916,32 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 Runtime Commands - assets Returns Results", func():
+	test("Runtime Commands - assets Returns Results", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var result: String = cmds._cmd_assets([])
 		return result.contains("Assets in res://") and result.contains(".gd")
 	)
 
-	test("T6 Runtime Commands - find_asset Glob Matches", func():
+	test("Runtime Commands - find_asset Glob Matches", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var result: String = cmds._cmd_find_asset(["*RuntimeCommands*"])
 		return result.contains("RuntimeCommands.gd")
 	)
 
-	test("T6 Runtime Commands - find_asset No Match", func():
+	test("Runtime Commands - find_asset No Match", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var result: String = cmds._cmd_find_asset(["*__zzz_no_such_asset__*"])
 		return result.to_lower().contains("no assets matched") or result.to_lower().contains("no matches")
 	)
 
-	test("T6 Runtime Commands - tick_rate Reports And Rejects Out Of Range", func():
+	test("Runtime Commands - tick_rate Reports And Rejects Out Of Range", func():
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
 		var report: String = cmds._cmd_tick_rate([])
 		var range_err: String = cmds._cmd_tick_rate(["9999"])
 		return report.contains("Tick rate:") and range_err.to_lower().contains("must be 1-1000")
 	)
 
-	test("T6 Runtime Commands - vsync Reports State", func():
+	test("Runtime Commands - vsync Reports State", func():
 		if Engine.is_editor_hint():
 			return true
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
@@ -1949,7 +1949,7 @@ func run_builtin_commands_tests():
 		return result.to_lower().contains("vsync:")
 	)
 
-	test("T6 Runtime Commands - audio_bus Lists Master", func():
+	test("Runtime Commands - audio_bus Lists Master", func():
 		if Engine.is_editor_hint():
 			return true
 		var cmds = load("res://addons/debug_console/core/RuntimeCommands.gd").new()
@@ -1957,7 +1957,7 @@ func run_builtin_commands_tests():
 		return result.contains("Master")
 	)
 
-	test("T6 UI Commands - All Registered", func():
+	test("UI Commands - All Registered", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/UICommands.gd").new()
 		cmds.register_commands(temp_registry, null)
@@ -1972,7 +1972,7 @@ func run_builtin_commands_tests():
 		return true
 	)
 
-	test("T6 UI Commands - ui_panel Spawns PanelContainer", func():
+	test("UI Commands - ui_panel Spawns PanelContainer", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -1987,7 +1987,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_label Spawns With Text", func():
+	test("UI Commands - ui_label Spawns With Text", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2002,7 +2002,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_button Spawns With Text", func():
+	test("UI Commands - ui_button Spawns With Text", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2017,7 +2017,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_vbox Spawns VBoxContainer", func():
+	test("UI Commands - ui_vbox Spawns VBoxContainer", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2032,7 +2032,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_grid Sets Columns", func():
+	test("UI Commands - ui_grid Sets Columns", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2047,7 +2047,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_layout Applies Full Rect Preset", func():
+	test("UI Commands - ui_layout Applies Full Rect Preset", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2065,7 +2065,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_text_color Sets font_color Override", func():
+	test("UI Commands - ui_text_color Sets font_color Override", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2083,7 +2083,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_size Sets custom_minimum_size", func():
+	test("UI Commands - ui_size Sets custom_minimum_size", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2100,7 +2100,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_anchor Parses Four Floats", func():
+	test("UI Commands - ui_anchor Parses Four Floats", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2118,7 +2118,7 @@ func run_builtin_commands_tests():
 		return ok
 	)
 
-	test("T6 UI Commands - ui_dump Returns Non-Empty Tree", func():
+	test("UI Commands - ui_dump Returns Non-Empty Tree", func():
 		var tree := Engine.get_main_loop() as SceneTree
 		if not tree:
 			return false
@@ -2135,89 +2135,89 @@ func run_builtin_commands_tests():
 	)
 	# --- end T6 external command module tests ---
 
-	# --- T7 external command module registration tests ---
+	# --- external command module registration tests ---
 	# 11 new domain modules added in parallel. Each test uses the
 	# temp_registry pattern so the live autoload is never mutated.
 	# Sentinel commands picked for coverage: at least one command per
 	# module that ought to exist if register_commands ran end-to-end.
-	test("T7 Physics - Registers raycast + apply_force + collision_layers", func():
+	test("Physics - Registers raycast + apply_force + collision_layers", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/PhysicsCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("raycast") and temp_registry._commands.has("apply_force") and temp_registry._commands.has("collision_layers")
 	)
 
-	test("T7 Animation - Registers anim_play + anim_stop + anim_list", func():
+	test("Animation - Registers anim_play + anim_stop + anim_list", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/AnimationCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("anim_play") and temp_registry._commands.has("anim_stop") and temp_registry._commands.has("anim_list")
 	)
 
-	test("T7 Camera - Registers cam_list + cam_pos + cam_shake", func():
+	test("Camera - Registers cam_list + cam_pos + cam_shake", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/CameraCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("cam_list") and temp_registry._commands.has("cam_pos") and temp_registry._commands.has("cam_shake")
 	)
 
-	test("T7 Timer - Registers schedule + repeat + stopwatch", func():
+	test("Timer - Registers schedule + repeat + stopwatch", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/TimerCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("schedule") and temp_registry._commands.has("repeat") and temp_registry._commands.has("stopwatch")
 	)
 
-	test("T7 Prefab - Registers prefab_save + prefab_spawn + prefab_swarm", func():
+	test("Prefab - Registers prefab_save + prefab_spawn + prefab_swarm", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/PrefabCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("prefab_save") and temp_registry._commands.has("prefab_spawn") and temp_registry._commands.has("prefab_swarm")
 	)
 
-	test("T7 Math - Registers rand + lerp_val + noise + vec", func():
+	test("Math - Registers rand + lerp_val + noise + vec", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/MathCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("rand") and temp_registry._commands.has("lerp_val") and temp_registry._commands.has("noise") and temp_registry._commands.has("vec")
 	)
 
-	test("T7 Dialog - Registers dialog_alert + dialog_confirm + dialog_input", func():
+	test("Dialog - Registers dialog_alert + dialog_confirm + dialog_input", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/DialogCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("dialog_alert") and temp_registry._commands.has("dialog_confirm") and temp_registry._commands.has("dialog_input")
 	)
 
-	test("T7 Particles - Registers particles_burst + particles_emit + particles_clear", func():
+	test("Particles - Registers particles_burst + particles_emit + particles_clear", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/ParticleCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("particles_burst") and temp_registry._commands.has("particles_emit") and temp_registry._commands.has("particles_clear")
 	)
 
-	test("T7 Data - Registers csv_read + json_read + table + query", func():
+	test("Data - Registers csv_read + json_read + table + query", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/DataCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("csv_read") and temp_registry._commands.has("json_read") and temp_registry._commands.has("table") and temp_registry._commands.has("query")
 	)
 
-	test("T7 Shader - Registers shader_load + shader_set + mat_new", func():
+	test("Shader - Registers shader_load + shader_set + mat_new", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/ShaderCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("shader_load") and temp_registry._commands.has("shader_set") and temp_registry._commands.has("mat_new")
 	)
 
-	test("T7 Tilemap - Registers tile_set + tile_get + tile_fill", func():
+	test("Tilemap - Registers tile_set + tile_get + tile_fill", func():
 		var temp_registry = load("res://addons/debug_console/core/CommandRegistry.gd").new()
 		var cmds = load("res://addons/debug_console/core/TilemapCommands.gd").new()
 		cmds.register_commands(temp_registry, null)
 		return temp_registry._commands.has("tile_set") and temp_registry._commands.has("tile_get") and temp_registry._commands.has("tile_fill")
 	)
 
-	test("T7 All Modules Load Via Loader", func():
+	test("All Modules Load Via Loader", func():
 		# Verify the BuiltInCommands T6/T7 loader picks up every module without
 		# crashing. We instantiate a fresh BuiltInCommands against a temp
 		# registry; if any module's class_name registration or class loading
@@ -2336,7 +2336,7 @@ func run_autocomplete_tests():
 		return mode1 == "files" and mode2 == "files" and mode3 == "files" and mode4 == "files" and mode5 == "files"
 	)
 
-	# --- T3.2 smart autocomplete tests ---
+	# --- smart autocomplete tests ---
 	# These exercise the per-mode dispatch in EditorConsole._determine_autocomplete_mode
 	# and the new node-path suggestion machinery. We instantiate EditorConsole
 	# directly with .new() (no scene fixture needed) because these methods don't
@@ -2541,7 +2541,7 @@ func run_editor_console_tests():
 		return ok
 	)
 
-	# --- T2.1 keyboard UX tests ---
+	# --- keyboard UX tests ---
 	# These tests exercise the popup-driven autocomplete and the 8 LineEdit
 	# keyboard shortcuts (Up/Down, Tab/Shift+Tab, Esc, Enter, Home, End,
 	# Ctrl+A, Ctrl+U). Each test gates on Engine.is_editor_hint() because
@@ -2699,7 +2699,7 @@ func run_editor_console_tests():
 	)
 	# --- end T2.1 keyboard UX tests ---
 
-	# --- T2.2 output renderer tests ---
+	# --- output renderer tests ---
 	# Colorization runs inside add_log_message before the level-color wrap.
 	# Tests gate on Engine.is_editor_hint() because the fixture instantiates
 	# EditorConsole.tscn which only fully wires up in the editor.
@@ -2783,7 +2783,7 @@ func run_editor_console_tests():
 	)
 	# --- end T2.2 output renderer tests ---
 
-	# --- T3.3 persistence tests ---
+	# --- persistence tests ---
 	# Stub-based tests verify EditorConsole's wiring to the persistence API
 	# without touching real user:// files. The stub is a RefCounted with the
 	# minimum surface that set_persistence and _execute_command call into:
@@ -2849,7 +2849,7 @@ func run_editor_console_tests():
 	# --- end T3.3 persistence tests ---
 
 
-	# --- W1 bash polish tests ---
+	# --- bash polish tests ---
 	# These tests cover the 8 W1 mandate items: welcome banner, bash prompt,
 	# command coloring, common-prefix Tab, Ctrl+L, Ctrl+R reverse search,
 	# dark theme, caret blink. All gate on Engine.is_editor_hint() because
@@ -3104,7 +3104,7 @@ func run_editor_console_tests():
 	)
 	# --- end W1 bash polish tests ---
 
-	# --- T5 readline shortcut tests (editor) ---
+	# --- readline shortcut tests (editor) ---
 	# Bash readline parity: Ctrl+W/K/Y kill ring + Alt+B/F word nav.
 	test("Editor Console - T5 Ctrl+W Deletes Word Backward", func():
 		if not Engine.is_editor_hint():
@@ -3392,7 +3392,7 @@ func run_game_console_tests():
 		return no_input_line and still_valid
 	)
 
-	# --- T2.1 keyboard UX tests (GameConsole runtime-only) ---
+	# --- keyboard UX tests (GameConsole runtime-only) ---
 	# Mirror the editor popup/keyboard tests for the runtime console, scoped
 	# to the behaviors GameConsole actually supports (commands-only popup, no
 	# directory / file / node-type suggestion modes).
@@ -3450,7 +3450,7 @@ func run_game_console_tests():
 	)
 	# --- end T2.1 keyboard UX tests ---
 
-	# --- T2.3 opacity + resize tests ---
+	# --- opacity + resize tests ---
 	test("Game Console - Opacity Set", func():
 		if Engine.is_editor_hint():
 			return true  # GameConsole behavior is runtime-only
@@ -3502,7 +3502,7 @@ func run_game_console_tests():
 	)
 	# --- end T2.3 opacity + resize tests ---
 
-	# --- T3.2 smart autocomplete tests ---
+	# --- smart autocomplete tests ---
 	# Runtime parity with EditorConsole's node-path suggestions. GameConsole
 	# gains the "node_paths" mode for inspect / get / set / watch / scene_tree
 	# / signals / properties. Tests use _instantiate_game_console_fixture so
@@ -3534,7 +3534,7 @@ func run_game_console_tests():
 	)
 	# --- end T3.2 smart autocomplete tests ---
 
-	# --- W1 bash polish tests ---
+	# --- bash polish tests ---
 	# These cover the runtime polish features added in Wave 1: the welcome
 	# banner emitted at _ready, the bash-style prompt prepended to every
 	# echoed command, per-token coloring of the echoed command line, smart
@@ -3722,7 +3722,7 @@ func run_game_console_tests():
 	)
 	# --- end W1 bash polish tests ---
 
-	# --- T5 readline shortcut tests (game) ---
+	# --- readline shortcut tests (game) ---
 	# Runtime parity with the editor T5 suite. GameConsole carries its own
 	# independent _kill_ring slot, so these tests must not assume any
 	# state shared with the editor console.

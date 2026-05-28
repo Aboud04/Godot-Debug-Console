@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleTweenAdvancedCommands extends RefCounted
 
-# T8 extension - advanced tween commands that build on the single-property
+# Extension - advanced tween commands that build on the single-property
 # `tween` command from SceneCommands.gd. Auto-discovered by the loader in
 # BuiltInCommands._register_t6_extensions and kept alive in the static
 # _t8_extensions array, so this module survives plugin reloads and its

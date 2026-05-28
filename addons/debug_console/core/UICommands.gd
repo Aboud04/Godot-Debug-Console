@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleUICommands extends RefCounted
 
-# Tier 6 - declarative UI builder commands. Each command spawns a Control
+# Declarative UI builder commands. Each command spawns a Control
 # node (PanelContainer, Label, Button, etc) under a target parent at runtime.
 # The parent defaults to the scene root's CanvasLayer if one exists; otherwise
 # a new CanvasLayer named "DebugConsoleUI" is created lazily as a child of

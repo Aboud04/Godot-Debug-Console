@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleDialogCommands extends RefCounted
 
-# Tier 7 - spawns Godot's built-in modal dialogs (AcceptDialog,
+# Spawns Godot's built-in modal dialogs (AcceptDialog,
 # ConfirmationDialog, FileDialog, ColorPicker host Window) from the console.
 # Dialogs are inherently asynchronous: the command returns immediately with an
 # awaiting ID, and the user's response is delivered to the console output via

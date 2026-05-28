@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleShaderCommands extends RefCounted
 
-# Tier 7 - live shader/material tweaking commands. This module ships separately
+# Live shader/material tweaking commands. This module ships separately
 # from BuiltInCommands.gd to keep that file under control as the command surface
 # grows. The orchestrator (BuiltInCommands.register_universal_commands)
 # instantiates one of these, holds a strong reference, and calls
@@ -18,7 +18,7 @@ class_name DebugConsoleShaderCommands extends RefCounted
 #
 # Both flavours work in editor and runtime; node resolution is delegated to
 # _resolve_node which branches on Engine.is_editor_hint() exactly like the
-# other Tier 6/7 modules.
+# other modules.
 
 const _COLOR_ERROR := "#FF4444"
 const _COLOR_PATH := "#5FBEE0"
@@ -411,7 +411,7 @@ func _parse_shader_value(raw: String) -> Variant:
 		if hex.length() in [3, 6, 8] and _is_hex(hex):
 			return Color(s)
 	# Comma-separated numbers map to Vector2 / Vector3 / Vector4 the same way
-	# the Tier 6 scene commands do.
+	# the scene commands do.
 	if s.contains(","):
 		var parts: PackedStringArray = s.split(",")
 		var nums: Array[float] = []

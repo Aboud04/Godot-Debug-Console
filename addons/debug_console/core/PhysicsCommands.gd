@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsolePhysicsCommands extends RefCounted
 
-# Tier 7 - physics queries and force application at runtime. Designed for the
+# Physics queries and force application at runtime. Designed for the
 # "shake the simulation and see what happens" debugging workflow: cast rays
 # from arbitrary points, dump live overlap sets, kick rigid bodies, swap
 # collision masks on the fly, and yank gravity to stress test reactions.

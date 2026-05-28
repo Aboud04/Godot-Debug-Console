@@ -14,7 +14,7 @@ const LOG_LEVEL_SUCCESS := 3
 # pattern as EditorConsole; survives @tool script reloads.
 const _META_LOG_BUFFER := "debug_console_log_buffer"
 
-# T2.3 - opacity and resize bounds. Floor on opacity keeps the console at
+# - opacity and resize bounds. Floor on opacity keeps the console at
 # least faintly visible so a stray scroll can't make it invisible. Min
 # height keeps the input line reachable; max is computed against the live
 # viewport at apply time (80% of viewport height).
@@ -39,13 +39,13 @@ var history_index: int = -1
 var is_animating: bool = false
 var target_height: float = 400.0
 
-# T2.3 resize-handle drag state. Plain runtime-only fields; GameConsole is
+# resize-handle drag state. Plain runtime-only fields; GameConsole is
 # NOT a @tool script, so hot-reload survival via meta isn't needed here.
 var _is_resizing: bool = false
 var _resize_start_mouse_y: float = 0.0
 var _resize_start_height: float = 0.0
 
-# T2.3 print interception. Re-entry guard prevents the callback from
+# print interception. Re-entry guard prevents the callback from
 # recursing when add_log_message itself emits a log (e.g., DebugCore.Log
 # pushing through Output). _logger_instance holds the attached Logger
 # subclass (lazily created on first `intercept on`); Godot 4.6 has no
@@ -56,7 +56,7 @@ var _in_logger_callback: bool = false
 var _logger_instance: Object = null
 var _logger_unavailable: bool = false
 
-# T2.1 popup-driven autocomplete state. Ephemeral session fields - see the
+# popup-driven autocomplete state. Ephemeral session fields - see the
 # matching block in EditorConsole.gd for rationale.
 var _matching_commands: Array[String] = []
 var _user_draft: String = ""
@@ -83,7 +83,7 @@ const _COLOR_FLAG_OR_PIPE := "#FF6B9D"
 const _COLOR_STRING_LITERAL := "#5FBEE0"
 const _REVERSE_SEARCH_PROMPT_PREFIX := "(reverse-i-search)`"
 
-# W1 bash polish: Ctrl+R reverse-history-search state. Plain runtime-only
+# bash polish: Ctrl+R reverse-history-search state. Plain runtime-only
 # fields; GameConsole is NOT a @tool script. _reverse_search_index points
 # at the slot in command_history we last matched at; the next backward
 # step starts from index - 1. pre_input / pre_caret / pre_placeholder hold
@@ -141,7 +141,7 @@ func _setup_ui():
 	
 	output_text.bbcode_enabled = true
 	output_text.scroll_following = true
-	# W1: high-contrast defaults for the runtime overlay. The 85% black
+	#  high-contrast defaults for the runtime overlay. The 85% black
 	# background from GameConsole.tscn stays; we lift the unmarked text
 	# color toward white and bump the base font size so logs read cleanly
 	# at 1080p without having to override every category color.
@@ -155,7 +155,7 @@ func _setup_ui():
 	output_text.add_theme_constant_override("text_highlight_v_padding", 0)
 	
 	input_line.placeholder_text = "Enter command... (F12 to close)"
-	# W1: blinking caret so the input always feels "alive" - Godot defaults
+	#  blinking caret so the input always feels "alive" - Godot defaults
 	# to no blink on LineEdit which makes the cursor easy to lose.
 	input_line.caret_blink = true
 	input_line.caret_blink_interval = 0.5
@@ -167,7 +167,7 @@ func _input(event):
 	if not visible:
 		return
 	
-	# T2.3: Ctrl+Scroll on the GameConsole adjusts opacity. We use _input
+	#  Ctrl+Scroll on the GameConsole adjusts opacity. We use _input
 	# (not _gui_input) because most descendant Controls have MOUSE_FILTER_STOP
 	# and would otherwise block the wheel event from bubbling to the parent.
 	# The rect check keeps the hook scoped to the console's actual area.
@@ -186,7 +186,7 @@ func _input(event):
 		# and we must not also close the console. F12 and Ctrl+` always close
 		# regardless of popup state - those are dedicated console toggles, not
 		# popup escape.
-		# W1: while a Ctrl+R reverse search is active, Esc cancels the search
+		#  while a Ctrl+R reverse search is active, Esc cancels the search
 		# (handled in _on_input_line_gui_input). It must NOT also close the
 		# console, otherwise the user loses both the search state AND the
 		# whole overlay in one keystroke.
@@ -266,7 +266,7 @@ func _execute_command(command: String):
 	command_history.append(command)
 	history_index = command_history.size()
 	
-	# W1: bash-style echoed prompt. _format_bash_prompt produces a fully
+	#  bash-style echoed prompt. _format_bash_prompt produces a fully
 	# BBCode-colorized line; _colorize_message in add_log_message early-outs
 	# on strings that already contain [color=], so we won't double-wrap.
 	add_log_message(_format_bash_prompt(command), LOG_LEVEL_INFO)
@@ -287,7 +287,7 @@ func add_log_message(message: String, level: int = LOG_LEVEL_INFO):
 	if not output_text:
 		return
 	var color = _get_level_color(level)
-	# T2.2: per-token category colorization. GameConsole intentionally skips
+	#  per-token category colorization. GameConsole intentionally skips
 	# the [url=...] click-wrap that EditorConsole applies - runtime overlays
 	# can't call EditorInterface, and a styled-but-inert link would mislead
 	# end users. Paths still get the cyan color treatment.
@@ -501,7 +501,7 @@ func _on_input_line_gui_input(event: InputEvent) -> void:
 	var ctrl: bool = key_event.ctrl_pressed
 	var shift: bool = key_event.shift_pressed or Input.is_key_pressed(KEY_SHIFT)
 	
-	# W1: reverse search has highest priority. While active, ALL keys funnel
+	#  reverse search has highest priority. While active, ALL keys funnel
 	# through the search handler so typing builds the query, Tab/arrows
 	# commit, Enter executes, Esc cancels, and Ctrl+R steps to the next
 	# older match. Bypasses the popup machinery and Ctrl-prefix branch
@@ -528,7 +528,7 @@ func _on_input_line_gui_input(event: InputEvent) -> void:
 				accept_event()
 				return
 			KEY_L:
-				# W1: bash-style Ctrl+L clears the scrollback. We deliberately
+				#  bash-style Ctrl+L clears the scrollback. We deliberately
 				# keep the current input_line text untouched so a half-typed
 				# command isn't lost when the user just wants a clean view.
 				_last_input_action = "clear_console"
@@ -536,7 +536,7 @@ func _on_input_line_gui_input(event: InputEvent) -> void:
 				accept_event()
 				return
 			KEY_R:
-				# W1: enter reverse history search mode. _reverse_search_start
+				#  enter reverse history search mode. _reverse_search_start
 				# captures the current input/caret/placeholder for Esc-restore
 				# and resets the popup; the handler at the top of this method
 				# takes over key dispatch on the next event.
@@ -586,7 +586,7 @@ func _on_input_line_gui_input(event: InputEvent) -> void:
 					_cycle_autocomplete_selection(-1)
 					_preview_autocomplete_selection()
 				elif _preview_pending:
-					# W1 bash-style: first Tab after the popup opens tries to
+					# bash-style: first Tab after the popup opens tries to
 					# advance the typed word to the longest common prefix
 					# across all matches BEFORE previewing any single item.
 					# If we advance, leave _preview_pending true so a follow-up
@@ -700,7 +700,7 @@ func _show_autocomplete_popup() -> void:
 	_position_autocomplete_popup()
 
 func _refresh_command_matches() -> void:
-	# T3.2 - dispatch by mode. The runtime console supports two modes:
+	# - dispatch by mode. The runtime console supports two modes:
 	# "commands" (the legacy default) and "node_paths" (for inspect, get,
 	# set, watch, scene_tree, signals, properties). Editor-only modes
 	# (files, directories, filenames_only, node_types) make no sense at
@@ -725,7 +725,7 @@ func _refresh_command_matches() -> void:
 	if _matching_commands.size() > _MAX_POPUP_ITEMS:
 		_matching_commands = _matching_commands.slice(0, _MAX_POPUP_ITEMS)
 
-# T3.2 - commands whose first arg is a live node path. PUNT: per-target
+# - commands whose first arg is a live node path. PUNT: per-target
 # property completion for `get <target>.<property>` is intentionally not
 # implemented - see EditorConsole._determine_autocomplete_mode for the
 # same note. We always suggest node paths for the first arg.
@@ -761,7 +761,7 @@ func _get_command_suggestions(current_word: String) -> void:
 	_matching_commands = matches
 
 func _get_node_path_suggestions(current_word: String) -> void:
-	# T3.2 - runtime parity with EditorConsole._get_node_path_suggestions.
+	# - runtime parity with EditorConsole._get_node_path_suggestions.
 	# We merge three sources:
 	#   1) "Engine" - global singleton (always offered, prefix-filtered)
 	#   2) Direct children of /root - autoload short names + the current
@@ -1285,7 +1285,7 @@ func _adjust_opacity_by(delta: float) -> void:
 	var new_val: float = set_opacity(current + delta)
 	_persist_console_value("opacity", new_val)
 
-# T2.3 resize-handle drag. Left-click + drag on the handle updates
+# resize-handle drag. Left-click + drag on the handle updates
 # target_height live and applies it through the same _update_height() the
 # show/hide tweens use, so the size you drag to becomes the new "open"
 # height for subsequent show animations.
@@ -1363,7 +1363,7 @@ func _persist_console_value(key: String, value: Variant) -> void:
 	cfg.set_value(_CONSOLE_CONFIG_SECTION, key, value)
 	cfg.save(_CONSOLE_CONFIG_PATH)
 
-# T2.3 print interception.
+# print interception.
 #
 # Godot 4.5+ exposes the Logger class to GDScript and OS.add_logger
 # accepts a Logger subclass. We conditionally load GameConsoleLogger.gd

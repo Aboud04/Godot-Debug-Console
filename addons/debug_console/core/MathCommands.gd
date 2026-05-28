@@ -1,10 +1,10 @@
 @tool
 class_name DebugConsoleMathCommands extends RefCounted
 
-# Tier 7 - math utility commands. Bundles the random/lerp/noise/vector/angle
+# Math utility commands. Bundles the random/lerp/noise/vector/angle
 # helpers gamedevs typically reach for in a debug console. All commands run in
 # "both" contexts (math is context-agnostic). Follows the same registration
-# contract as the other T7 sibling modules: the orchestrator instantiates one
+# contract as the other sibling modules: the orchestrator instantiates one
 # of these, holds a strong reference, and calls register_commands(registry,
 # core). Callables stay valid for the plugin lifetime via that strong ref.
 

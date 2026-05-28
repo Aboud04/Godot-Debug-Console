@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleAnimationCommands extends RefCounted
 
-# Tier 7 - runtime AnimationPlayer / AnimationTree control commands. Shipped
+# Runtime AnimationPlayer / AnimationTree control commands. Shipped
 # as a separate module from BuiltInCommands.gd to keep that file under
 # control as the command surface grows. The orchestrator instantiates one of
 # these, holds a strong reference, and calls register_commands(registry,

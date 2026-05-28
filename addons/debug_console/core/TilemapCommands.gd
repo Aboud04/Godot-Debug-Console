@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleTilemapCommands extends RefCounted
 
-# Tier 7 - live TileMapLayer / TileMap manipulation commands. Godot 4.6
+# Live TileMapLayer / TileMap manipulation commands. Godot 4.6
 # deprecated TileMap in favour of one-layer-per-node TileMapLayer instances,
 # so every command here resolves the path to a TileMapLayer first and falls
 # back to legacy TileMap (layer 0) only when needed. Legacy support is
@@ -415,7 +415,7 @@ func _cmd_tile_load(args: Array) -> String:
 
 func _resolve_tml(path: String) -> Object:
 	# Prefer TileMapLayer; fall back to legacy TileMap. We accept the same
-	# editor/runtime path conventions as the other T6/T7 modules.
+	# editor/runtime path conventions as the other modules.
 	var node: Node = _resolve_node(path)
 	if not node:
 		return null

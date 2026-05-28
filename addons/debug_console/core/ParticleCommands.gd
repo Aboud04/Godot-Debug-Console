@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleParticleCommands extends RefCounted
 
-# Tier 7 - GPUParticles2D / GPUParticles3D spawn + tweak commands. Shipped as
+# GPUParticles2D / GPUParticles3D spawn + tweak commands. Shipped as
 # a separate module so BuiltInCommands.gd stays small. The orchestrator
 # instantiates one of these and holds a strong reference so the Callables
 # registered below stay valid for the plugin lifetime.

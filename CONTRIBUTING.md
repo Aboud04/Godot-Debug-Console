@@ -45,7 +45,7 @@ addons/debug_console/
 ├── core/           # Core functionality (commands, registry, persistence, public API)
 │   ├── DebugCore.gd           # Autoload - logging, output dispatch, history
 │   ├── CommandRegistry.gd     # Autoload - command registration, execution, piping
-│   ├── DebugConsoleAPI.gd     # Autoload (DebugConsole) - PUBLIC plugin author API (Tier 4)
+│   ├── DebugConsoleAPI.gd     # Autoload (DebugConsole) - PUBLIC plugin author API
 │   ├── ConsoleCommand.gd      # Resource - declarative command definition
 │   ├── PersistenceManager.gd  # RefCounted - history + cwd persistence to user://
 │   └── BuiltInCommands.gd     # RefCounted - built-in command implementations

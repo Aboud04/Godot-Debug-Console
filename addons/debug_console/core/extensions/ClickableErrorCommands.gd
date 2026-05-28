@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleClickableErrorCommands extends RefCounted
 
-# T8 extension - turns Godot-style error text into BBCode [url=...] links so
+# Extension - turns Godot-style error text into BBCode [url=...] links so
 # clicking a path in the console output opens the script in the editor.
 # In game mode (no EditorInterface available) the commands still emit a
 # coloured, machine-readable "path:line" string so external tooling can parse

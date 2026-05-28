@@ -6,7 +6,7 @@
 
 A powerful, feature-rich debug console addon for Godot 4.x (target: **4.5 / 4.6**) that provides an integrated terminal-like experience inside the Godot editor and at runtime.
 
-**Current version:** v1.2.0 - Phase 4 + Wave 1 closed, 247/247 tests pass. See [What's New in v1.2.0](#whats-new-in-v120).
+**Current version:** v1.2.0 - Phase 4, closed, 247/247 tests pass. See [What's New in v1.2.0](#whats-new-in-v120).
 
 ## Overview
 
@@ -221,9 +221,9 @@ addons/debug_console/
 │   ├── CommandRegistry.gd      # Command registration, execution, piping engine
 │   ├── BuiltInCommands.gd      # All ~50 built-in command implementations
 │   ├── DebugCore.gd            # Core logging, history, output dispatch
-│   ├── DebugConsoleAPI.gd      # Public `/root/DebugConsole` autoload API (Tier 4)
-│   ├── ConsoleCommand.gd       # Declarative command Resource (Tier 4)
-│   └── PersistenceManager.gd   # History + cwd persistence to user:// (Tier 3)
+│   ├── DebugConsoleAPI.gd      # Public `/root/DebugConsole` autoload API
+│   ├── ConsoleCommand.gd       # Declarative command Resource
+│   └── PersistenceManager.gd   # History + cwd persistence to user://
 ├── editor/
 │   ├── EditorConsole.gd        # Editor console UI, autocomplete popup, table renderer
 │   └── EditorConsole.tscn
@@ -245,7 +245,7 @@ addons/debug_console/
 ```
 /root/DebugCore             - logging, history
 /root/CommandRegistry       - command registry + piping
-/root/DebugConsole          - public plugin API (Tier 4)
+/root/DebugConsole          - public plugin API
 /root/GameConsoleManager    - spawns GameConsole when the project runs
 ```
 
@@ -393,23 +393,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## What's New in v1.2.0
 
-v1.2.0 closes Phase 4 (Audit & Hardening) of the GSD roadmap - 4 tiers plus a Wave 1 polish pass. The test suite grew from 167 to **247 tests, all passing**.
+v1.2.0 closes Phase 4 (Audit & Hardening) of the GSD roadmap with 247 tests, all passing. The test suite grew from 167 to **247 tests, all passing**.
 
-- **Tier 1 - Correctness & test integrity.** Four surgical bugs squashed: cwd-clamping in autocomplete, silent `Esc` close in the game console, BBCode color loss on log truncation, focus theft from the script editor, and hardcoded UID collisions in `new_scene`. Removed an auto-PASS heuristic in the test runner and tightened OR-chain assertions that previously accepted failure as success.
-- **Tier 2 - UX & keyboard polish.** Floating ItemList autocomplete popup with Tab/Shift+Tab cycling and Esc dismissal; Home/End/Ctrl+A/Ctrl+U input controls; colored output categories (cyan paths, yellow numbers, red errors, amber warnings); clickable file paths that open in the script editor; `ls -l` table renderer; game console gets `opacity`, drag-resize handle, and `intercept on|off|status` for routing engine `print()`/`push_warning()`/`push_error()` (Godot 4.5+).
-- **Tier 3 - New commands & smart autocomplete.** New built-ins: `tree`, `wc`, `signals`, `properties`, `reload_scripts`, `diff`, `json`. Context-aware autocomplete: node-path suggestions after `inspect`/`get`/`set`/`watch`/`scene_tree`/`signals`/`properties`, directories-only after `cd`, files-only after `cat`/`grep`/`head`/`tail`/`stat`/`wc`/`diff`. Persistent history (500 cap, consecutive-dedup) and per-project cwd via `user://`.
-- **Tier 4 - Public plugin author API.** Stable `/root/DebugConsole` autoload with `register_command`, `unregister_command`, `print_to_console`, `has_command`, `list_commands`, `register_resource_command`, plus `command_executed` / `console_opened` / `console_closed` / `command_registered` / `command_unregistered` signals. Declarative `ConsoleCommand` Resource type.
-- **Wave 1 - Bash polish.** BBCode-rendered banner on first open, bash-style `dc:cwd $` prompt for echoed commands, Ctrl+R reverse history search, smart-prefix Tab completion (longest common prefix first, popup on second press), darker theme aligned with the editor's Dark theme.
+- **Correctness & test integrity.** Four surgical bugs squashed: cwd-clamping in autocomplete, silent `Esc` close in the game console, BBCode color loss on log truncation, focus theft from the script editor, and hardcoded UID collisions in `new_scene`. Removed an auto-PASS heuristic in the test runner and tightened OR-chain assertions that previously accepted failure as success.
+- **UX & keyboard polish.** Floating ItemList autocomplete popup with Tab/Shift+Tab cycling and Esc dismissal; Home/End/Ctrl+A/Ctrl+U input controls; colored output categories (cyan paths, yellow numbers, red errors, amber warnings); clickable file paths that open in the script editor; `ls -l` table renderer; game console gets `opacity`, drag-resize handle, and `intercept on|off|status` for routing engine `print()`/`push_warning()`/`push_error()` (Godot 4.5+).
+- **New commands & smart autocomplete.** New built-ins: `tree`, `wc`, `signals`, `properties`, `reload_scripts`, `diff`, `json`. Context-aware autocomplete: node-path suggestions after `inspect`/`get`/`set`/`watch`/`scene_tree`/`signals`/`properties`, directories-only after `cd`, files-only after `cat`/`grep`/`head`/`tail`/`stat`/`wc`/`diff`. Persistent history (500 cap, consecutive-dedup) and per-project cwd via `user://`.
+- **Public plugin author API.** Stable `/root/DebugConsole` autoload with `register_command`, `unregister_command`, `print_to_console`, `has_command`, `list_commands`, `register_resource_command`, plus `command_executed` / `console_opened` / `console_closed` / `command_registered` / `command_unregistered` signals. Declarative `ConsoleCommand` Resource type.
+- **Bash polish.** BBCode-rendered banner on first open, bash-style `dc:cwd $` prompt for echoed commands, Ctrl+R reverse history search, smart-prefix Tab completion (longest common prefix first, popup on second press), darker theme aligned with the editor's Dark theme.
 
 ## Changelog
 
 ### v1.2.0 (Current - 2026-05-27)
-- Phase 4 + Wave 1 complete. Test suite: **247/247 PASS**.
-- Tier 1: 4 bug fixes (B1 cwd autocomplete, B2 Esc close, B3a BBCode truncation, B3b focus theft, B4 UID collision). Test honesty: removed auto-PASS heuristic, tightened OR-chains, added regression tests.
-- Tier 2: autocomplete popup + keyboard polish, colored output, clickable paths, table renderer, game console opacity / resize / print interception.
-- Tier 3: `tree`, `wc`, `signals`, `properties`, `reload_scripts`, `diff`, `json` commands; context-aware autocomplete; persistent history and cwd.
-- Tier 4: public `DebugConsole` plugin author API + `ConsoleCommand` Resource.
-- Wave 1: banner, bash prompt, Ctrl+R, smart-prefix completion, dark theme.
+- Phase 4 complete. Test suite: **247/247 PASS**.
+-  4 bug fixes (B1 cwd autocomplete, B2 Esc close, B3a BBCode truncation, B3b focus theft, B4 UID collision). Test honesty: removed auto-PASS heuristic, tightened OR-chains, added regression tests.
+-  autocomplete popup + keyboard polish, colored output, clickable paths, table renderer, game console opacity / resize / print interception.
+-  `tree`, `wc`, `signals`, `properties`, `reload_scripts`, `diff`, `json` commands; context-aware autocomplete; persistent history and cwd.
+-  public `DebugConsole` plugin author API + `ConsoleCommand` Resource.
+-  banner, bash prompt, Ctrl+R, smart-prefix completion, dark theme.
 
 ### v1.1.0
 - Phase 3b power tools: `inspect`, `get`/`set`, persistent `alias`/`unalias` (ConfigFile), `benchmark`, `config`.

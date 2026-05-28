@@ -33,3 +33,12 @@ mono_crash.*.json
 # Tooling plugins (not part of this addon's distribution)
 addons/godot_mcp/
 addons/godotiq/
+
+# Agent-instruction files (not shipped to users)
+AGENTS.md
+CLAUDE.md
+GODOTIQ_RULES.md
+STATE.md
+ROADMAP.md
+PROJECT.md
+REQUIREMENTS.md

@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsolePrefabCommands extends RefCounted
 
-# Tier 7 - in-memory prefab snapshots.
+# In-memory prefab snapshots.
 # Dictionary lives on this RefCounted via _t6_keepalive (persists across rebuilds).
 #
 # pack() correctness: PackedScene.pack() only walks descendants whose owner

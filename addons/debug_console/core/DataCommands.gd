@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleDataCommands extends RefCounted
 
-# Tier 7 - tabular data + Resource introspection commands. Mirrors the
+# Tabular data + Resource introspection commands. Mirrors the
 # SceneCommands/RuntimeCommands/UICommands module convention: the orchestrator
 # in BuiltInCommands.register_universal_commands instantiates one of these,
 # keeps a strong reference, and calls register_commands(registry, core). All

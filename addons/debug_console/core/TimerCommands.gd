@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleTimerCommands extends RefCounted
 
-# Tier 7 - deferred and recurring command scheduling. Like the other Tier 6+
+# Deferred and recurring command scheduling. Like the other tier modules
 # modules this is a RefCounted instance owned by BuiltInCommands; the
 # orchestrator keeps a strong reference so the Callables we register stay
 # valid across the plugin lifetime.

@@ -8,13 +8,13 @@ var _aliases: Dictionary = {}
 var _registered_alias_names: Array[String] = []
 var _active_alias_calls: Array[String] = []
 
-# T3.3 - optional persistence hook injected by plugin.gd. When non-null its
+# optional persistence hook injected by plugin.gd. When non-null its
 # save_cwd(String) method is called after every successful `cd` so the working
 # directory survives editor restarts. Tests that don't care about persistence
 # leave this null and _change_directory behaves exactly as before.
 var _state_saver: Object = null
 
-# T2.3 - toggled by the `intercept on|off` command. Defaults OFF so the
+# toggled by the `intercept on|off` command. Defaults OFF so the
 # GameConsole never accidentally double-logs its own output (which would
 # recurse infinitely once a usable logger hook is wired).
 var _intercept_active: bool = false
@@ -33,7 +33,7 @@ func initialize(registry: Node, core: Node) -> void:
 	_registry = registry
 	_core = core
 
-# T3.3 - injection point for the persistence layer. Kept as a separate setter
+# injection point for the persistence layer. Kept as a separate setter
 # (not a parameter of initialize) so other call sites that just need
 # command registration aren't forced to know about persistence.
 func set_state_saver(saver: Object) -> void:
@@ -84,7 +84,7 @@ func register_editor_commands():
 	_registry.register_command("head", _head, "Show first N lines of input or file", "editor", true)
 	_registry.register_command("tail", _tail, "Show last N lines of input or file", "editor", true)
 
-	# T3.1 - filesystem and developer convenience commands
+	# filesystem and developer convenience commands
 	_registry.register_command("tree", _cmd_tree, "Visualize the filesystem tree under the current directory", "editor")
 	_registry.register_command("wc", _cmd_wc, "Count lines, words, and characters in a file or piped input", "editor", true)
 	_registry.register_command("reload_scripts", _cmd_reload_scripts, "Force-reload every GDScript file in the project", "editor")
@@ -127,7 +127,7 @@ func register_game_commands():
 	_registry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
 	_registry.register_command("opacity", _cmd_opacity, "Set console background opacity (0-100 or 0.0-1.0)", "game")
 	_registry.register_command("intercept", _cmd_intercept, "Toggle interception of global print/warning/error output (on|off|status)", "game")
-	# T5 - New commands
+	# New commands
 	_registry.register_command("perf", _cmd_perf, "Show Performance.Monitor dashboard; optionally filter by name", "game")
 	_registry.register_command("show_colliders", _cmd_show_colliders, "Toggle CollisionShape debug rendering: show_colliders [on|off]", "game")
 	_registry.register_command("show_nav", _cmd_show_nav, "Toggle navigation polygon debug rendering: show_nav [on|off]", "game")
@@ -169,21 +169,21 @@ func register_universal_commands():
 	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
 	_registry.register_command("benchmark", _cmd_benchmark, "Benchmark a command: benchmark [iterations] <command>", "both")
 	_registry.register_command("config", _cmd_config, "Manage persistent console settings", "both")
-	# T3.1 - live introspection commands (work in both editor and runtime)
+	# live introspection commands (work in both editor and runtime)
 	_registry.register_command("signals", _cmd_signals, "List signals defined on a live node, with connection counts", "both")
 	_registry.register_command("properties", _cmd_properties, "List property names and types on a live target (no values)", "both")
-	# W1 - pretty-print arbitrary JSON. Pipe-aware so `echo '...' | json` works.
+	# pretty-print arbitrary JSON. Pipe-aware so `echo '...' | json` works.
 	_registry.register_command("json", _cmd_json, "Pretty-print JSON: json <text> (also pipe-able)", "both", true)
-	# T5 - New commands
+	# New commands
 	_registry.register_command("eval", _cmd_eval, "Evaluate a GDScript expression (sandboxed: no defs/assigns)", "both")
 	_registry.register_command("mark", _cmd_mark, "Print a colored timestamped marker for log syncing", "both")
 	_registry.register_command("crashtest", _cmd_crashtest, "Fire assert(false) to validate crash reporting", "both")
 	# Live font-size tuning (user feedback: default too small).
 	_registry.register_command("font_size", _cmd_font_size, "Get/set console font size: font_size [n] (8-32, default 15)", "both")
 	_registry.register_command("line_spacing", _cmd_line_spacing, "Get/set console line spacing in pixels: line_spacing [n] (0-40)", "both")
-	# T6 - Load external command modules (scene/runtime/UI). Modules are kept
+	# Load external command modules (scene/runtime/UI). Modules are kept
 	# alive in a static array; on a fresh registry we re-register against it.
-	# T7 - Same pattern for the 11 new domain modules (physics/animation/camera/
+	# Same pattern for the 11 new domain modules (physics/animation/camera/
 	# timer/prefab/math/dialog/particles/data/shader/tilemap). Each appends to
 	# the same array; the for-loop below re-registers all of them against the
 	# current _registry on every call to register_universal_commands.
@@ -222,7 +222,7 @@ func register_universal_commands():
 					push_error("Debug Console: %s loaded but .new() failed" % path)
 			else:
 				push_error("Debug Console: failed to load module %s" % path)
-	# T8 extensions auto-discovery. Any *Commands.gd dropped into
+	# extensions auto-discovery. Any *Commands.gd dropped into
 	# core/extensions/ at addon ship time is picked up automatically. Each is
 	# instantiated once per plugin lifetime and kept alive in the static
 	# _t8_extensions array (separate from _t6_keepalive so the size-mismatch
@@ -717,7 +717,7 @@ var current_directory: String = "res://"
 
 static var global_current_directory: String = "res://"
 
-# T6 - keepalive for external command modules (SceneCommands, RuntimeCommands,
+# keepalive for external command modules (SceneCommands, RuntimeCommands,
 # UICommands). Each module is RefCounted and registers Callables bound to
 # itself. If we stored these on the instance, a transient BuiltInCommands.new()
 # would let the modules GC after register_universal_commands() returns,
@@ -726,7 +726,7 @@ static var global_current_directory: String = "res://"
 # still gets re-registered on the next call (modules are stateless w.r.t.
 # the registry identity).
 static var _t6_keepalive: Array = []
-# T8 extensions: auto-discovered modules in core/extensions/. Separate from
+# extensions: auto-discovered modules in core/extensions/. Separate from
 # _t6_keepalive so the size-mismatch hot-reload guard above does not false-alarm
 # when an extension is added or removed.
 static var _t8_extensions: Array = []
@@ -787,7 +787,7 @@ func _list_files(args: Array, input: String = "", is_pipe_context: bool = false)
 	
 	return "Files in %s:\n%s" % [current_directory, "\t".join(colored_files)]
 
-# T2.2 long-format table renderer for `ls -l`. Columns are TYPE / NAME / SIZE /
+# long-format table renderer for `ls -l`. Columns are TYPE / NAME / SIZE /
 # MODIFIED separated by spaces. NAME is padded based on the PLAIN-text length
 # of the entry (BBCode tags add invisible chars that would throw off %-Ns
 # padding), so emoji width is the only remaining source of column drift.
@@ -1814,7 +1814,7 @@ func _set_time_scale(args: Array) -> String:
 	Engine.time_scale = scale
 	return "Time scale set to: %.2f" % scale
 
-# T2.3 - set GameConsole background opacity. Accepts 0-100 (percent) or
+# set GameConsole background opacity. Accepts 0-100 (percent) or
 # 0.0-1.0 (raw alpha). The actual visual update + clamp-to-floor lives on
 # GameConsole.set_opacity(); we just route + persist. When no GameConsole
 # is reachable (e.g., called from a test fixture before the manager has
@@ -1849,7 +1849,7 @@ func _cmd_opacity(args: Array) -> String:
 	_save_console_config_values(values)
 	return "Opacity set to %d%% (%.2f)" % [int(round(applied * 100.0)), applied]
 
-# T2.3 - toggle global print interception. Uses Godot 4.5+ Logger API
+# toggle global print interception. Uses Godot 4.5+ Logger API
 # via GameConsoleLogger.gd; falls back to a no-op with an explanatory
 # message on older engines (see GameConsole.set_intercept_enabled).
 func _cmd_intercept(args: Array) -> String:
@@ -1939,7 +1939,7 @@ func _build_tree_lines(node: Node, prefix: String, is_last: bool, output: Array[
 
 #endregion
 
-#region T3.1 New commands
+#region New commands
 
 # tree [depth] - visualize the filesystem under current_directory using the
 func _cmd_tree(args: Array) -> String:
@@ -2185,7 +2185,7 @@ func _resolve_diff_path(p: String) -> String:
 
 #endregion
 
-#region W1 - Output renderer helpers
+#region Output renderer helpers
 
 const _DC_COLOR_PATH := "#5FBEE0"
 const _DC_COLOR_NUMBER := "#F7DC6F"
@@ -2459,9 +2459,9 @@ func _format_duration_ms(ms: int) -> String:
 	return "%dm%ds" % [minutes, seconds]
 #endregion
 
-#region T5 - New commands
+#region New commands
 
-# T5 - REPL using the sandboxed Expression class. Cannot define functions or
+# REPL using the sandboxed Expression class. Cannot define functions or
 # assign variables, but supports literals, operators, constructors, autoload
 # refs, and (at runtime) `get_node("/root/...")` via the SceneTree root as
 # base instance.
@@ -2487,7 +2487,7 @@ func _cmd_eval(args: Array) -> String:
 		return "null"
 	return str(result)
 
-# T5 - Performance.Monitor dashboard. Groups monitors into categories with
+# Performance.Monitor dashboard. Groups monitors into categories with
 # BBCode-colored headers. Optional first arg filters by case-insensitive
 # substring match against the display name.
 func _cmd_perf(args: Array) -> String:
@@ -2606,7 +2606,7 @@ func _dc_format_bytes(bytes: float) -> String:
 		return "%.2f MiB" % (b / (1024.0 * 1024.0))
 	return "%.2f GiB" % (b / (1024.0 * 1024.0 * 1024.0))
 
-# T5 - Toggle CollisionShape debug rendering. Editor-mode is rejected because
+# Toggle CollisionShape debug rendering. Editor-mode is rejected because
 # enabling it on the editor's SceneTree would affect the editor viewport, not
 # the running game. Nodes redraw their debug shapes on the next physics step.
 func _cmd_show_colliders(args: Array) -> String:
@@ -2638,7 +2638,7 @@ func _dc_toggle_scene_tree_flag(args: Array, flag_name: String, label: String, c
 	tree.set(flag_name, target)
 	return "%s: %s" % [label, ("ON" if target else "OFF")]
 
-# T5 - Colored timestamped sync marker. Useful for matching console output
+# Colored timestamped sync marker. Useful for matching console output
 # against external recordings, log dumps, or screen captures.
 func _cmd_mark(args: Array) -> String:
 	var label: String = " ".join(args).strip_edges()
@@ -2647,7 +2647,7 @@ func _cmd_mark(args: Array) -> String:
 	var ts: String = Time.get_time_string_from_system()
 	return "[color=#FFD700]===== %s ===== %s ===== %s =====[/color]" % [ts, label, ts]
 
-# T5 - Slow-motion shortcut. `slowmo` defaults to 0.25; `slowmo off` resets to
+# Slow-motion shortcut. `slowmo` defaults to 0.25; `slowmo off` resets to
 # 1.0. Negative or zero values are rejected (use `freeze` for 0.0).
 func _cmd_slowmo(args: Array) -> String:
 	if Engine.is_editor_hint():
@@ -2667,7 +2667,7 @@ func _cmd_slowmo(args: Array) -> String:
 	Engine.time_scale = 0.25
 	return "Time scale: 0.25 (slow motion)"
 
-# T5 - Freeze time without using the pause flag. Useful for inspecting a live
+# Freeze time without using the pause flag. Useful for inspecting a live
 # scene without disabling _process callbacks that depend on time_scale.
 func _cmd_freeze(args: Array) -> String:
 	if Engine.is_editor_hint():
@@ -2675,7 +2675,7 @@ func _cmd_freeze(args: Array) -> String:
 	Engine.time_scale = 0.0
 	return "Time scale: 0.0 (frozen). Use 'timescale 1.0' or 'slowmo off' to resume."
 
-# T5 - Get/set the physics tick rate. Valid range 1-1000 matches Godot's own
+# Get/set the physics tick rate. Valid range 1-1000 matches Godot's own
 # project setting bounds. Reading is allowed in editor mode; writing is too,
 # since Engine.physics_ticks_per_second has no SceneTree dependency.
 func _cmd_physics_tps(args: Array) -> String:
@@ -2690,7 +2690,7 @@ func _cmd_physics_tps(args: Array) -> String:
 	Engine.physics_ticks_per_second = n
 	return "Physics TPS: %d" % Engine.physics_ticks_per_second
 
-# T5 - Fire assert(false) to validate crash reporting. In debug builds the
+# Fire assert(false) to validate crash reporting. In debug builds the
 # assert halts execution; in release builds assert is a no-op and only the
 # returned string is observable.
 func _cmd_crashtest(args: Array) -> String:

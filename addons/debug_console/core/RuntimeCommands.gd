@@ -1,7 +1,7 @@
 @tool
 class_name DebugConsoleRuntimeCommands extends RefCounted
 
-# Tier 6 - engine/input/viewport/asset commands. Shipped as a separate module
+# Engine/input/viewport/asset commands. Shipped as a separate module
 # from BuiltInCommands.gd to keep that file manageable. Owned by the live
 # plugin instance, which holds a strong reference so Callables stay valid.
 
