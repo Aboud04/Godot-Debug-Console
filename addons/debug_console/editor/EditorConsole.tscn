@@ -64,3 +64,18 @@ text = "Send"
 [node name="ClearButton" type="Button" parent="VBox/InputPanel"]
 layout_mode = 2
 text = "Clear"
+
+[node name="AutocompletePopup" type="PanelContainer" parent="."]
+visible = false
+top_level = true
+z_index = 100
+custom_minimum_size = Vector2(240, 0)
+offset_right = 240.0
+offset_bottom = 24.0
+
+[node name="AutocompleteList" type="ItemList" parent="AutocompletePopup"]
+layout_mode = 2
+focus_mode = 0
+auto_height = true
+max_text_lines = 1
+allow_search = false

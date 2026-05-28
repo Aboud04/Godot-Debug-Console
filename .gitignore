@@ -11,3 +11,34 @@ export_presets.cfg
 .mono/
 data_*/
 mono_crash.*.json
+
+# Local dev / editor / orchestrator artifacts (not part of the addon)
+.cursorrules
+.windsurfrules
+.vscode/
+.github/copilot-instructions.md
+.github/skills/
+.godotiq/
+
+# File-based test runner (orchestrator only; not part of the shipped addon)
+.dc_test_runner.gd
+.dc_test_runner.gd.uid
+.dc_test_runner.tscn
+.dc_test_results.json
+.dc_test_progress.txt
+.dc_url_diag.gd.uid
+
+# Rogue subagent artifact
+.w1_tests.py
+# Tooling plugins (not part of this addon's distribution)
+addons/godot_mcp/
+addons/godotiq/
+
+# Agent-instruction files (not shipped to users)
+AGENTS.md
+CLAUDE.md
+GODOTIQ_RULES.md
+STATE.md
+ROADMAP.md
+PROJECT.md
+REQUIREMENTS.md
