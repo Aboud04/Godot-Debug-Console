@@ -474,4 +474,9 @@ func _format_watch_value(value) -> String:
 		return "[%s] %s" % [value.get_class(), value.name]
 	if value is String:
 		return value
-	return var_to_str(value)
+	# var_to_str recurses through nested Variants which trips Godot's
+	# variant_parser max-recursion guard on cyclic Object graphs (common during
+	# inspect on the test suite's fixture nodes). str() is the safe stringifier
+	# that stops at one level for complex types - we lose the type-preserving
+	# format (Vector2(1, 2) becomes (1, 2)) but gain not crashing on cycles.
+	return str(value)

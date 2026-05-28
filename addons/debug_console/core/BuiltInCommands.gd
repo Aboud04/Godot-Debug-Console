@@ -8,6 +8,17 @@ var _aliases: Dictionary = {}
 var _registered_alias_names: Array[String] = []
 var _active_alias_calls: Array[String] = []
 
+# optional persistence hook injected by plugin.gd. When non-null its
+# save_cwd(String) method is called after every successful `cd` so the working
+# directory survives editor restarts. Tests that don't care about persistence
+# leave this null and _change_directory behaves exactly as before.
+var _state_saver: Object = null
+
+# toggled by the `intercept on|off` command. Defaults OFF so the
+# GameConsole never accidentally double-logs its own output (which would
+# recurse infinitely once a usable logger hook is wired).
+var _intercept_active: bool = false
+
 const ALIAS_CONFIG_PATH := "user://debug_console_aliases.cfg"
 const CONSOLE_CONFIG_PATH := "user://debug_console_config.cfg"
 const CONSOLE_CONFIG_SECTION := "console"
@@ -21,6 +32,12 @@ const _DEFAULT_CONSOLE_CONFIG := {
 func initialize(registry: Node, core: Node) -> void:
 	_registry = registry
 	_core = core
+
+# injection point for the persistence layer. Kept as a separate setter
+# (not a parameter of initialize) so other call sites that just need
+# command registration aren't forced to know about persistence.
+func set_state_saver(saver: Object) -> void:
+	_state_saver = saver
 
 func _ensure_dependencies() -> void:
 	if _registry and _core:
@@ -38,6 +55,13 @@ func _ensure_dependencies() -> void:
 func register_editor_commands():
 	_ensure_dependencies()
 	register_universal_commands()
+	if not _registry:
+		return
+	# Transient-instance protection (see register_universal_commands for details).
+	if _registry._commands.has("ls"):
+		var existing_ls: Callable = _registry._commands["ls"].get("callable", Callable())
+		if existing_ls.is_valid() and existing_ls.get_object() != self:
+			return
 	
 	_registry.register_command("scene", _get_current_scene, "Get current scene info", "editor")
 	_registry.register_command("reload", _reload_scene, "Reload current scene", "editor")
@@ -59,6 +83,12 @@ func register_editor_commands():
 	_registry.register_command("stat", _stat, "Display file information such as size, type, and modification time", "editor")
 	_registry.register_command("head", _head, "Show first N lines of input or file", "editor", true)
 	_registry.register_command("tail", _tail, "Show last N lines of input or file", "editor", true)
+
+	# filesystem and developer convenience commands
+	_registry.register_command("tree", _cmd_tree, "Visualize the filesystem tree under the current directory", "editor")
+	_registry.register_command("wc", _cmd_wc, "Count lines, words, and characters in a file or piped input", "editor", true)
+	_registry.register_command("reload_scripts", _cmd_reload_scripts, "Force-reload every GDScript file in the project", "editor")
+	_registry.register_command("diff", _cmd_diff, "Line-level BBCode-colored diff of two files", "editor")
 
 	
 	_registry.register_command("new_script", _create_script, "Create new script file", "editor")
@@ -83,14 +113,46 @@ func register_editor_commands():
 func register_game_commands():
 	_ensure_dependencies()
 	register_universal_commands()
+	if not _registry:
+		return
+	# Transient-instance protection (see register_universal_commands for details).
+	if _registry._commands.has("fps"):
+		var existing_fps: Callable = _registry._commands["fps"].get("callable", Callable())
+		if existing_fps.is_valid() and existing_fps.get_object() != self:
+			return
 	
 	_registry.register_command("fps", _show_fps, "Show FPS information", "game")
 	_registry.register_command("nodes", _count_nodes, "Count nodes in scene tree", "game")
 	_registry.register_command("pause", _toggle_pause, "Toggle game pause", "game")
 	_registry.register_command("timescale", _set_time_scale, "Set engine time scale", "game")
+	_registry.register_command("opacity", _cmd_opacity, "Set console background opacity (0-100 or 0.0-1.0)", "game")
+	_registry.register_command("intercept", _cmd_intercept, "Toggle interception of global print/warning/error output (on|off|status)", "game")
+	# New commands
+	_registry.register_command("perf", _cmd_perf, "Show Performance.Monitor dashboard; optionally filter by name", "game")
+	_registry.register_command("show_colliders", _cmd_show_colliders, "Toggle CollisionShape debug rendering: show_colliders [on|off]", "game")
+	_registry.register_command("show_nav", _cmd_show_nav, "Toggle navigation polygon debug rendering: show_nav [on|off]", "game")
+	_registry.register_command("show_paths", _cmd_show_paths, "Toggle PathFollow path debug rendering: show_paths [on|off]", "game")
+	_registry.register_command("slowmo", _cmd_slowmo, "Slow-motion shortcut: slowmo [factor|off] (default 0.25)", "game")
+	_registry.register_command("freeze", _cmd_freeze, "Freeze time (Engine.time_scale = 0); resume with 'slowmo off'", "game")
+	_registry.register_command("physics_tps", _cmd_physics_tps, "Get/set Engine.physics_ticks_per_second (1-1000)", "game")
 
 func register_universal_commands():
 	_ensure_dependencies()
+	if not _registry:
+		return
+	# Transient-instance protection: if echo is already registered with a
+	if _registry._commands.has("echo"):
+		var existing_echo: Callable = _registry._commands["echo"].get("callable", Callable())
+		if existing_echo.is_valid() and existing_echo.get_object() != self:
+			# Live registry already has this owner's universals. Skip overwriting
+			# them but DO refresh T6 modules - they're stable in _t6_keepalive
+			# so re-registration is cheap and idempotent.
+			for module in _t6_keepalive:
+				if module and module.has_method("register_commands"):
+					module.register_commands(_registry, _core)
+			_load_aliases_from_config()
+			_register_alias_commands()
+			return
 	_registry.register_command("test", _run_tests, "Run all tests", "both")
 	_registry.register_command("help", _help, "Show available commands", "both")
 	_registry.register_command("clear", _clear, "Clear console output", "both")
@@ -107,6 +169,85 @@ func register_universal_commands():
 	_registry.register_command("unalias", _cmd_unalias, "Remove a persistent alias", "both")
 	_registry.register_command("benchmark", _cmd_benchmark, "Benchmark a command: benchmark [iterations] <command>", "both")
 	_registry.register_command("config", _cmd_config, "Manage persistent console settings", "both")
+	# live introspection commands (work in both editor and runtime)
+	_registry.register_command("signals", _cmd_signals, "List signals defined on a live node, with connection counts", "both")
+	_registry.register_command("properties", _cmd_properties, "List property names and types on a live target (no values)", "both")
+	# pretty-print arbitrary JSON. Pipe-aware so `echo '...' | json` works.
+	_registry.register_command("json", _cmd_json, "Pretty-print JSON: json <text> (also pipe-able)", "both", true)
+	# New commands
+	_registry.register_command("eval", _cmd_eval, "Evaluate a GDScript expression (sandboxed: no defs/assigns)", "both")
+	_registry.register_command("mark", _cmd_mark, "Print a colored timestamped marker for log syncing", "both")
+	_registry.register_command("crashtest", _cmd_crashtest, "Fire assert(false) to validate crash reporting", "both")
+	# Live font-size tuning (user feedback: default too small).
+	_registry.register_command("font_size", _cmd_font_size, "Get/set console font size: font_size [n] (8-32, default 15)", "both")
+	_registry.register_command("line_spacing", _cmd_line_spacing, "Get/set console line spacing in pixels: line_spacing [n] (0-40)", "both")
+	# Load external command modules (scene/runtime/UI). Modules are kept
+	# alive in a static array; on a fresh registry we re-register against it.
+	# Same pattern for the 11 new domain modules (physics/animation/camera/
+	# timer/prefab/math/dialog/particles/data/shader/tilemap). Each appends to
+	# the same array; the for-loop below re-registers all of them against the
+	# current _registry on every call to register_universal_commands.
+	#
+	# Hot-reload guard: the static _t6_keepalive can survive a script reload
+	# with a stale subset of modules (e.g. only the 3 T6 modules from a
+	# previous plugin generation). We detect that by comparing sizes against
+	# the canonical module_paths list and clear+reload if they mismatch.
+	# Without this guard, the live registry would silently miss the T7 module
+	# commands after any hot-reload that happened between T6 and T7 ship.
+	var module_paths: Array[String] = [
+		"res://addons/debug_console/core/SceneCommands.gd",
+		"res://addons/debug_console/core/RuntimeCommands.gd",
+		"res://addons/debug_console/core/UICommands.gd",
+		"res://addons/debug_console/core/PhysicsCommands.gd",
+		"res://addons/debug_console/core/AnimationCommands.gd",
+		"res://addons/debug_console/core/CameraCommands.gd",
+		"res://addons/debug_console/core/TimerCommands.gd",
+		"res://addons/debug_console/core/PrefabCommands.gd",
+		"res://addons/debug_console/core/MathCommands.gd",
+		"res://addons/debug_console/core/DialogCommands.gd",
+		"res://addons/debug_console/core/ParticleCommands.gd",
+		"res://addons/debug_console/core/DataCommands.gd",
+		"res://addons/debug_console/core/ShaderCommands.gd",
+		"res://addons/debug_console/core/TilemapCommands.gd",
+	]
+	if _t6_keepalive.size() != module_paths.size():
+		_t6_keepalive.clear()
+		for path in module_paths:
+			var script_res: GDScript = load(path) as GDScript
+			if script_res:
+				var module: RefCounted = script_res.new()
+				if module:
+					_t6_keepalive.append(module)
+				else:
+					push_error("Debug Console: %s loaded but .new() failed" % path)
+			else:
+				push_error("Debug Console: failed to load module %s" % path)
+	# extensions auto-discovery. Any *Commands.gd dropped into
+	# core/extensions/ at addon ship time is picked up automatically. Each is
+	# instantiated once per plugin lifetime and kept alive in the static
+	# _t8_extensions array (separate from _t6_keepalive so the size-mismatch
+	# guard above doesn't false-alarm when an extension count changes).
+	if _t8_extensions.is_empty():
+		var ext_dir := DirAccess.open("res://addons/debug_console/core/extensions")
+		if ext_dir:
+			ext_dir.list_dir_begin()
+			var file_name: String = ext_dir.get_next()
+			while not file_name.is_empty():
+				if file_name.ends_with("Commands.gd"):
+					var ext_path := "res://addons/debug_console/core/extensions/%s" % file_name
+					var ext_script: GDScript = load(ext_path) as GDScript
+					if ext_script:
+						var ext_module: RefCounted = ext_script.new()
+						if ext_module:
+							_t8_extensions.append(ext_module)
+				file_name = ext_dir.get_next()
+			ext_dir.list_dir_end()
+	for module in _t6_keepalive:
+		if module and module.has_method("register_commands"):
+			module.register_commands(_registry, _core)
+	for module in _t8_extensions:
+		if module and module.has_method("register_commands"):
+			module.register_commands(_registry, _core)
 	_load_aliases_from_config()
 	_register_alias_commands()
 
@@ -132,16 +273,6 @@ func _echo(args: Array, input: String = "", is_pipe_context: bool = false) -> St
 	if not input.is_empty():
 		return input
 	return " ".join(args) if args.size() > 0 else "Usage: echo <message>"
-
-func _history(args: Array) -> String:
-	_ensure_dependencies()
-	var history = _core.get_history()
-	var count = min(10, history.size())
-	if args.size() > 0:
-		count = min(args[0].to_int(), history.size())
-	
-	var recent = history.slice(-count)
-	return "Recent history:\n" + "\n".join(recent)
 
 func _cmd_watch(args: Array) -> String:
 	_ensure_dependencies()
@@ -586,6 +717,20 @@ var current_directory: String = "res://"
 
 static var global_current_directory: String = "res://"
 
+# keepalive for external command modules (SceneCommands, RuntimeCommands,
+# UICommands). Each module is RefCounted and registers Callables bound to
+# itself. If we stored these on the instance, a transient BuiltInCommands.new()
+# would let the modules GC after register_universal_commands() returns,
+# silently invalidating every registered Callable. The static array survives
+# transient instances and survives autoload reload, while a fresh registry
+# still gets re-registered on the next call (modules are stateless w.r.t.
+# the registry identity).
+static var _t6_keepalive: Array = []
+# extensions: auto-discovered modules in core/extensions/. Separate from
+# _t6_keepalive so the size-mismatch hot-reload guard above does not false-alarm
+# when an extension is added or removed.
+static var _t8_extensions: Array = []
+
 static func get_current_directory() -> String:
 	return global_current_directory
 
@@ -606,31 +751,96 @@ func _resolve_output_path(raw_path: String) -> String:
 	return "user://" + trimmed_path
 
 func _list_files(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	# T2.2: detect the -l flag for the long-format table renderer. Anything
+	# else in args is ignored (preserves the existing "no positional args"
+	# contract of the original implementation).
+	var long_format: bool = false
+	for a in args:
+		if str(a) == "-l":
+			long_format = true
+			break
+	
 	var dir = DirAccess.open(current_directory)
 	if not dir:
 		return "Error: Cannot access directory"
 	
-	var files = []
+	# Capture is_dir per-entry DURING iteration. The pre-T2.2 code called
+	var entries: Array = []
 	dir.list_dir_begin()
 	var file_name = dir.get_next()
-	
 	while file_name != "":
 		if not file_name.begins_with("."):
-			files.append(file_name)
+			entries.append({"name": file_name, "is_dir": dir.current_is_dir()})
 		file_name = dir.get_next()
-	
 	dir.list_dir_end()
-	files.sort()
+	entries.sort_custom(func(a, b): return str(a["name"]) < str(b["name"]))
 	
-	var colored_files = []
-	for fn in files:
-		var colored_name = _get_colored_filename(fn, dir.current_is_dir())
-		colored_files.append(colored_name)
+	if long_format:
+		return _format_long_listing(entries)
+	
+	var colored_files: Array = []
+	for e in entries:
+		colored_files.append(_get_colored_filename(str(e["name"]), bool(e["is_dir"])))
 	
 	if is_pipe_context:
 		return "\n".join(colored_files)
 	
 	return "Files in %s:\n%s" % [current_directory, "\t".join(colored_files)]
+
+# long-format table renderer for `ls -l`. Columns are TYPE / NAME / SIZE /
+# MODIFIED separated by spaces. NAME is padded based on the PLAIN-text length
+# of the entry (BBCode tags add invisible chars that would throw off %-Ns
+# padding), so emoji width is the only remaining source of column drift.
+const _LS_NAME_WIDTH := 32
+
+func _format_long_listing(entries: Array) -> String:
+	var lines: Array = []
+	lines.append("%-5s %-32s %-10s %s" % ["TYPE", "NAME", "SIZE", "MODIFIED"])
+	for e in entries:
+		var name: String = str(e["name"])
+		var is_dir: bool = bool(e["is_dir"])
+		var type_label: String = "DIR" if is_dir else "FILE"
+		var display_name: String = name + ("/" if is_dir else "")
+		var truncated_display: String = _truncate_name(display_name, _LS_NAME_WIDTH)
+		var colored_name: String = _get_colored_filename(name, is_dir)
+		var pad: int = max(0, _LS_NAME_WIDTH - truncated_display.length())
+		var name_cell: String = colored_name + " ".repeat(pad)
+		var path: String = current_directory.path_join(name)
+		var size_str: String = "-" if is_dir else _human_size(_file_size(path))
+		var mtime_str: String = _format_mtime(path)
+		lines.append("%-5s %s %-10s %s" % [type_label, name_cell, size_str, mtime_str])
+	return "\n".join(lines)
+
+func _truncate_name(name: String, max_width: int) -> String:
+	if name.length() <= max_width:
+		return name
+	return name.substr(0, max_width - 1) + "…"
+
+func _file_size(path: String) -> int:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if not f:
+		return 0
+	var size: int = f.get_length()
+	f.close()
+	return size
+
+func _human_size(bytes: int) -> String:
+	if bytes < 0:
+		return "-"
+	if bytes < 1024:
+		return "%dB" % bytes
+	if bytes < 1024 * 1024:
+		return "%.1fKB" % (bytes / 1024.0)
+	if bytes < 1024 * 1024 * 1024:
+		return "%.1fMB" % (bytes / (1024.0 * 1024.0))
+	return "%.1fGB" % (bytes / (1024.0 * 1024.0 * 1024.0))
+
+func _format_mtime(path: String) -> String:
+	var unix_time: int = int(FileAccess.get_modified_time(path))
+	if unix_time <= 0:
+		return "-"
+	var dt: Dictionary = Time.get_datetime_dict_from_unix_time(unix_time)
+	return "%04d-%02d-%02d" % [int(dt.get("year", 0)), int(dt.get("month", 0)), int(dt.get("day", 0))]
 
 func _get_colored_filename(filename: String, is_dir: bool) -> String:
 	if is_dir:
@@ -686,6 +896,7 @@ func _change_directory(args: Array) -> String:
 	if DirAccess.dir_exists_absolute(new_path):
 		current_directory = new_path
 		set_current_directory(new_path)
+		if _state_saver: _state_saver.save_cwd(current_directory)
 		return "Changed to: %s" % current_directory
 	else:
 		return "Error: Directory not found"
@@ -1041,7 +1252,7 @@ func _create_script(args: Array) -> String:
 		file_name += ".gd"
 	
 	var extends_type = args[1] if args.size() > 1 else "Node"
-	var classname = args[2] if args.size() > 2 else file_name.get_basename().capitalize().replace(" ", "")
+	var classname = args[2] if args.size() > 2 else _sanitize_classname(file_name.get_basename().capitalize().replace(" ", ""))
 	
 	var valid_types = ["Node", "Node2D", "Node3D", "Control", "CanvasItem", "CanvasLayer", "Viewport", "Window", "SubViewport", "Area2D", "Area3D", "CollisionShape2D", "CollisionShape3D", "Sprite2D", "Sprite3D", "Label", "Button", "LineEdit", "TextEdit", "RichTextLabel", "Panel", "VBoxContainer", "HBoxContainer", "GridContainer", "CenterContainer", "MarginContainer", "ScrollContainer", "TabContainer", "SplitContainer", "AspectRatioContainer", "TextureRect", "ColorRect", "NinePatchRect", "ProgressBar", "Slider", "SpinBox", "CheckBox", "CheckButton", "OptionButton", "ItemList", "Tree", "TreeItem", "FileDialog", "ColorPicker", "ColorPickerButton", "MenuButton", "PopupMenu", "MenuBar", "ToolButton", "LinkButton", "TextureButton", "TextureProgressBar", "AnimationPlayer", "AnimationTree", "Tween", "Timer", "Camera2D", "Camera3D", "Light2D", "Light3D", "AudioStreamPlayer", "AudioStreamPlayer2D", "AudioStreamPlayer3D", "AudioListener2D", "AudioListener3D", "RigidBody2D", "RigidBody3D", "CharacterBody2D", "CharacterBody3D", "StaticBody2D", "StaticBody3D", "KinematicBody2D", "KinematicBody3D", "Path2D", "Path3D", "NavigationAgent2D", "NavigationAgent3D", "NavigationRegion2D", "NavigationRegion3D", "NavigationPolygon", "NavigationMesh", "NavigationLink2D", "NavigationLink3D", "NavigationObstacle2D", "NavigationObstacle3D", "NavigationPathQueryParameters2D", "NavigationPathQueryParameters3D", "NavigationPathQueryResult2D", "NavigationPathQueryResult3D", "NavigationMeshSourceGeometry2D", "NavigationMeshSourceGeometry3D", "NavigationMeshSourceGeometryData2D", "NavigationMeshSourceGeometryData3D"]
 	
@@ -1069,6 +1280,29 @@ func _process(delta):
 	else:
 		return "Error: Failed to create script"
 
+# Strips leading dots and replaces non-identifier chars with underscores,
+func _sanitize_classname(raw: String) -> String:
+	if raw.is_empty():
+		return "GeneratedClass"
+	var s := raw
+	while not s.is_empty() and s[0] == ".":
+		s = s.substr(1)
+	var result := ""
+	for i in range(s.length()):
+		var c := s[i]
+		# A letter has different upper- and lower-case forms; a digit doesn't.
+		var is_letter := c.to_lower() != c.to_upper()
+		var is_digit := c.is_valid_int()
+		if is_letter or is_digit or c == "_":
+			result += c
+		else:
+			result += "_"
+	if result.is_empty():
+		return "GeneratedClass"
+	if result[0].is_valid_int():
+		result = "_" + result
+	return result
+
 func _create_scene(args: Array) -> String:
 	if args.size() == 0:
 		return "Usage: new_scene <filename> [root_node_type]"
@@ -1079,26 +1313,32 @@ func _create_scene(args: Array) -> String:
 	
 	var root_type = args[1] if args.size() > 1 else "Node"
 	var script_name = file_name.replace(".tscn", ".gd")
-	var classname = file_name.get_basename().capitalize().replace(" ", "")
+	var classname = _sanitize_classname(file_name.get_basename().capitalize().replace(" ", ""))
 	
+	# Write both the script and the scene under current_directory so they sit
 	var script_result = _create_script([script_name.get_basename(), root_type, classname])
 	if not script_result.contains("Created script"):
 		return "Error: " + script_result
 	
-	var scene_content = """[gd_scene load_steps=2 format=3 uid="uid://bqxvj6y5n8q8p"]
+	var script_full_path := current_directory.path_join(script_name)
+	var scene_full_path := current_directory.path_join(file_name)
+	
+	var new_uid_int := ResourceUID.create_id()
+	var new_uid_str := ResourceUID.id_to_text(new_uid_int)
+	var scene_content = """[gd_scene load_steps=2 format=3 uid="%s"]
 
-[ext_resource type="Script" path="res://%s" id="1_0"]
+[ext_resource type="Script" path="%s" id="1_0"]
 
 [node name="%s" type="%s"]
 script = ExtResource("1_0")
-""" % [script_name, classname, root_type]
+""" % [new_uid_str, script_full_path, classname, root_type]
 	
-	var scene_file = FileAccess.open("res://" + file_name, FileAccess.WRITE)
+	var scene_file = FileAccess.open(scene_full_path, FileAccess.WRITE)
 	if scene_file:
 		scene_file.store_string(scene_content)
 		scene_file.close()
 		_refresh_filesystem([])
-		return "Created scene: %s with script: %s" % [file_name, script_name]
+		return "Created scene: %s with script: %s" % [scene_full_path, script_full_path]
 	else:
 		return "Error: Failed to create scene file"
 
@@ -1473,8 +1713,20 @@ func _save_log(args: Array) -> String:
 #endregion
 
 #region Testing commands
+
+func _new_test_framework():
+	var script: GDScript = load("res://addons/debug_console/tests/TestFramework.gd")
+	if not script:
+		return null
+	return script.new()
+
+func _test_framework_error() -> String:
+	return "Error: TestFramework could not be loaded. Open Godot's Output panel and check addons/debug_console/tests/TestFramework.gd for parse errors."
+
 func _run_tests(args: Array) -> String:
-	var test_framework = TestFramework.new()
+	var test_framework = _new_test_framework()
+	if not test_framework:
+		return _test_framework_error()
 	test_framework.run_all_tests()
 	
 	register_editor_commands()
@@ -1482,7 +1734,9 @@ func _run_tests(args: Array) -> String:
 	return "Comprehensive test suite completed! Check console for detailed results."
 
 func _test_commands(args: Array) -> String:
-	var test_framework = TestFramework.new()
+	var test_framework = _new_test_framework()
+	if not test_framework:
+		return _test_framework_error()
 	test_framework.run_command_registry_tests()
 	
 	register_editor_commands()
@@ -1490,7 +1744,9 @@ func _test_commands(args: Array) -> String:
 	return "Command registry tests completed! Check console for results."
 
 func _test_autocomplete(args: Array) -> String:
-	var test_framework = TestFramework.new()
+	var test_framework = _new_test_framework()
+	if not test_framework:
+		return _test_framework_error()
 	test_framework.run_autocomplete_tests()
 	
 	register_editor_commands()
@@ -1498,7 +1754,9 @@ func _test_autocomplete(args: Array) -> String:
 	return "Autocomplete tests completed. Console reset. Check console for results."
 
 func _test_file_operations(args: Array) -> String:
-	var test_framework = TestFramework.new()
+	var test_framework = _new_test_framework()
+	if not test_framework:
+		return _test_framework_error()
 	test_framework.run_file_operation_tests()
 	
 	register_editor_commands()
@@ -1506,7 +1764,9 @@ func _test_file_operations(args: Array) -> String:
 	return "File operation tests completed! Check console for results."
 
 func _test_pipes(args: Array) -> String:
-	var test_framework = TestFramework.new()
+	var test_framework = _new_test_framework()
+	if not test_framework:
+		return _test_framework_error()
 	test_framework.run_piping_tests()
 	
 	# Re-register commands after test
@@ -1515,7 +1775,9 @@ func _test_pipes(args: Array) -> String:
 	return "Piping tests completed. Check console for results."
 
 func _quick_test(args: Array) -> String:
-	var test_framework = TestFramework.new()
+	var test_framework = _new_test_framework()
+	if not test_framework:
+		return _test_framework_error()
 	test_framework.run_command_registry_tests()
 	test_framework.run_builtin_commands_tests()
 	return "Quick test completed - Command registry and built-in commands tested"
@@ -1551,6 +1813,89 @@ func _set_time_scale(args: Array) -> String:
 	
 	Engine.time_scale = scale
 	return "Time scale set to: %.2f" % scale
+
+# set GameConsole background opacity. Accepts 0-100 (percent) or
+# 0.0-1.0 (raw alpha). The actual visual update + clamp-to-floor lives on
+# GameConsole.set_opacity(); we just route + persist. When no GameConsole
+# is reachable (e.g., called from a test fixture before the manager has
+# created one), we still update persisted config so the value applies on
+# next console open.
+func _cmd_opacity(args: Array) -> String:
+	var gc: Node = _get_game_console_instance()
+	if args.is_empty():
+		if gc and gc.has_method("get_opacity"):
+			var current: float = float(gc.call("get_opacity"))
+			return "Current opacity: %d%% (%.2f). Usage: opacity <0-100>" % [int(round(current * 100.0)), current]
+		return "Usage: opacity <0-100>"
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_float():
+		return "Error: opacity expects a number between 0 and 100 (or 0.0 and 1.0), got: %s" % raw
+	var raw_f: float = raw.to_float()
+	# Accept both "50" and "0.5" - anything > 1.0 is treated as percent.
+	var value: float = raw_f
+	if value > 1.0:
+		value = value / 100.0
+	if value < 0.0 or value > 1.0:
+		return "Error: opacity must be between 0 and 100 (or 0.0 and 1.0), got: %s" % raw
+	var applied: float = value
+	if gc and gc.has_method("set_opacity"):
+		applied = float(gc.call("set_opacity", value))
+	else:
+		# Mirror the GameConsole floor so the persisted value matches what
+		# the console would actually display next time it opens.
+		applied = clamp(value, 0.1, 1.0)
+	var values: Dictionary = _load_console_config_values()
+	values["opacity"] = applied
+	_save_console_config_values(values)
+	return "Opacity set to %d%% (%.2f)" % [int(round(applied * 100.0)), applied]
+
+# toggle global print interception. Uses Godot 4.5+ Logger API
+# via GameConsoleLogger.gd; falls back to a no-op with an explanatory
+# message on older engines (see GameConsole.set_intercept_enabled).
+func _cmd_intercept(args: Array) -> String:
+	if args.is_empty():
+		return "Usage: intercept on|off|status"
+	var sub: String = str(args[0]).to_lower()
+	var gc: Node = _get_game_console_instance()
+	match sub:
+		"on":
+			if gc and gc.has_method("is_intercept_available") and not gc.call("is_intercept_available"):
+				_intercept_active = false
+				return "Intercept unavailable: this Godot build does not expose the Logger API (requires 4.5+)"
+			_intercept_active = true
+			var ok: bool = true
+			if gc and gc.has_method("set_intercept_enabled"):
+				ok = bool(gc.call("set_intercept_enabled", true))
+			if not ok:
+				_intercept_active = false
+				return "Intercept unavailable: GameConsole could not attach a logger on this engine"
+			return "Intercept ON - global print/push_warning/push_error routed to console"
+		"off":
+			_intercept_active = false
+			if gc and gc.has_method("set_intercept_enabled"):
+				gc.call("set_intercept_enabled", false)
+			return "Intercept OFF"
+		"status":
+			var avail: String = "available"
+			if gc and gc.has_method("is_intercept_available") and not gc.call("is_intercept_available"):
+				avail = "unavailable on this Godot version"
+			return "Intercept: %s (%s)" % [("ON" if _intercept_active else "OFF"), avail]
+		_:
+			return "Usage: intercept on|off|status"
+
+func _get_game_console_instance() -> Node:
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	if not tree:
+		return null
+	var gcm: Node = tree.root.get_node_or_null("/root/GameConsoleManager")
+	if not gcm:
+		return null
+	# console_instance is a plain field on GameConsoleManager; use get() so
+	# this @tool script doesn't take a parse-time dependency on the class.
+	var inst: Variant = gcm.get("console_instance")
+	if inst is Node and is_instance_valid(inst):
+		return inst
+	return null
 
 #endregion
 
@@ -1591,5 +1936,889 @@ func _build_tree_lines(node: Node, prefix: String, is_last: bool, output: Array[
 		var child = children[i]
 		var is_last_child = (i == children.size() - 1)
 		_build_tree_lines(child, next_prefix, is_last_child, output)
+
+#endregion
+
+#region New commands
+
+# tree [depth] - visualize the filesystem under current_directory using the
+func _cmd_tree(args: Array) -> String:
+	var depth: int = 3
+	if args.size() > 0:
+		var raw: String = str(args[0]).strip_edges()
+		if not raw.is_valid_int():
+			return "Usage: tree [depth]"
+		depth = clamp(int(raw), 1, 10)
+
+	var root_path: String = current_directory
+	var dir := DirAccess.open(root_path)
+	if not dir:
+		return "Error: Cannot access directory: %s" % root_path
+
+	var lines: Array[String] = [root_path]
+	_build_fs_tree_lines(root_path, "", lines, depth, 1)
+	return "\n".join(lines)
+
+func _build_fs_tree_lines(path: String, prefix: String, output: Array[String], max_depth: int, current_depth: int) -> void:
+	if current_depth > max_depth:
+		return
+	var dir := DirAccess.open(path)
+	if not dir:
+		return
+
+	var entries: Array = []
+	dir.list_dir_begin()
+	var entry_name := dir.get_next()
+	while entry_name != "":
+		if not entry_name.begins_with("."):
+			entries.append({"name": entry_name, "is_dir": dir.current_is_dir()})
+		entry_name = dir.get_next()
+	dir.list_dir_end()
+	entries.sort_custom(func(a, b): return str(a["name"]) < str(b["name"]))
+
+	for i in range(entries.size()):
+		var item: Dictionary = entries[i]
+		var is_last: bool = (i == entries.size() - 1)
+		var branch: String = "└─ " if is_last else "├─ "
+		var item_name: String = str(item["name"])
+		output.append("%s%s%s" % [prefix, branch, item_name])
+		if bool(item["is_dir"]):
+			var next_prefix: String = prefix + ("   " if is_last else "│  ")
+			_build_fs_tree_lines(path.path_join(item_name), next_prefix, output, max_depth, current_depth + 1)
+
+# wc <file> - bash-style line/word/char count. Counts piped input when
+func _cmd_wc(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	var content: String = ""
+	var label: String = ""
+
+	if is_pipe_context and not input.is_empty():
+		content = input
+	elif args.size() > 0:
+		var file_name: String = str(args[0])
+		var full_path: String = file_name
+		if not (file_name.begins_with("res://") or file_name.begins_with("user://")):
+			full_path = current_directory.path_join(file_name)
+		if not FileAccess.file_exists(full_path):
+			return "Error: File not found - %s" % full_path
+		var f := FileAccess.open(full_path, FileAccess.READ)
+		if not f:
+			return "Error: Cannot read file - %s" % file_name
+		content = f.get_as_text()
+		f.close()
+		label = file_name
+	else:
+		return "Usage: wc <file>"
+
+	var line_count: int = content.split("\n").size()
+	var normalized: String = content.replace("\t", " ").replace("\n", " ").replace("\r", " ")
+	var tokens: PackedStringArray = normalized.split(" ", false)
+	var word_count: int = tokens.size()
+	var char_count: int = content.length()
+
+	if label.is_empty():
+		return "%5d %5d %5d" % [line_count, word_count, char_count]
+	return "%5d %5d %5d %s" % [line_count, word_count, char_count, label]
+
+# signals <node_path> - list signal definitions on a live target with current
+func _cmd_signals(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: signals <node_path|autoload_name|Engine>"
+
+	var path: String = " ".join(args).strip_edges()
+	var target: Object = _core._resolve_inspect_target(path)
+	if not is_instance_valid(target):
+		return "Error: Target not found: %s" % path
+
+	var display_path: String = path
+	if target is Node:
+		var node_target: Node = target
+		display_path = str(node_target.get_path()) if node_target.is_inside_tree() else node_target.name
+
+	var class_str: String = target.get_class()
+	var signal_list: Array = target.get_signal_list()
+	var suffix: String = "" if signal_list.size() == 1 else "s"
+
+	var lines: Array[String] = []
+	lines.append("%s [%s] - %d signal%s" % [display_path, class_str, signal_list.size(), suffix])
+	for sig in signal_list:
+		var sig_name: String = str(sig.get("name", ""))
+		var arg_list: Array = sig.get("args", [])
+		var arg_strs: Array[String] = []
+		for a in arg_list:
+			var aname: String = str(a.get("name", ""))
+			var atype: int = int(a.get("type", TYPE_NIL))
+			arg_strs.append("%s: %s" % [aname, _inspect_type_name(atype)])
+		var connections: int = 0
+		if target.has_signal(sig_name):
+			connections = target.get_signal_connection_list(sig_name).size()
+		lines.append("  %s(%s) - %d connection(s)" % [sig_name, ", ".join(arg_strs), connections])
+	return "\n".join(lines)
+
+# properties <node_path> - filtered view of `inspect`: names + types only,
+func _cmd_properties(args: Array) -> String:
+	_ensure_dependencies()
+	if not _core:
+		return "Error: DebugCore is unavailable"
+	if args.is_empty():
+		return "Usage: properties <node_path|autoload_name|Engine>"
+
+	var path: String = " ".join(args).strip_edges()
+	var target: Object = _core._resolve_inspect_target(path)
+	if not is_instance_valid(target):
+		return "Error: Target not found: %s" % path
+
+	var display_path: String = path
+	if target is Node:
+		var node_target: Node = target
+		display_path = str(node_target.get_path()) if node_target.is_inside_tree() else node_target.name
+
+	var class_str: String = target.get_class()
+	var collected: Array[Dictionary] = []
+	for p in target.get_property_list():
+		var usage: int = int(p.get("usage", 0))
+		if usage & PROPERTY_USAGE_INTERNAL:
+			continue
+		if usage & (PROPERTY_USAGE_GROUP | PROPERTY_USAGE_SUBGROUP | PROPERTY_USAGE_CATEGORY):
+			continue
+		var pname: String = str(p.get("name", ""))
+		if pname.is_empty():
+			continue
+		collected.append({"name": pname, "type": int(p.get("type", TYPE_NIL))})
+
+	var lines: Array[String] = []
+	lines.append("%s [%s] - %d property/properties" % [display_path, class_str, collected.size()])
+	for prop in collected:
+		lines.append("  [%-8s] %s" % [_inspect_type_name(int(prop["type"])), str(prop["name"])])
+	return "\n".join(lines)
+
+# reload_scripts - walk res:// and force-reload every .gd file via
+# ResourceLoader with CACHE_MODE_REPLACE. Skips third-party addon trees
+# (godot_mcp, godotiq) and the engine cache (.godot) for safety.
+func _cmd_reload_scripts(args: Array) -> String:
+	if not Engine.is_editor_hint():
+		return "Not in editor"
+	var reloaded_counter: Array[int] = [0]
+	var failures: Array[String] = []
+	_collect_and_reload_scripts("res://", reloaded_counter, failures)
+	var msg: String = "Reloaded %d script(s). %d failure(s)." % [reloaded_counter[0], failures.size()]
+	if failures.size() > 0:
+		msg += "\nFailures:"
+		for f in failures:
+			msg += "\n  %s" % f
+	return msg
+
+func _collect_and_reload_scripts(path: String, reloaded_counter: Array[int], failures: Array[String]) -> void:
+	if path.contains("/addons/godot_mcp") or path.contains("/addons/godotiq") or path.contains("/.godot"):
+		return
+	var dir := DirAccess.open(path)
+	if not dir:
+		return
+	dir.list_dir_begin()
+	var entry_name := dir.get_next()
+	while entry_name != "":
+		if not entry_name.begins_with("."):
+			var full_path: String = path.path_join(entry_name)
+			if dir.current_is_dir():
+				_collect_and_reload_scripts(full_path, reloaded_counter, failures)
+			elif entry_name.ends_with(".gd"):
+				var loaded: Resource = ResourceLoader.load(full_path, "Script", ResourceLoader.CACHE_MODE_REPLACE)
+				if loaded == null:
+					failures.append(full_path)
+				else:
+					reloaded_counter[0] = reloaded_counter[0] + 1
+		entry_name = dir.get_next()
+	dir.list_dir_end()
+
+# diff <file_a> <file_b> - naive line-level diff (no Myers/LCS), with BBCode
+func _cmd_diff(args: Array) -> String:
+	if args.size() < 2:
+		return "Usage: diff <file_a> <file_b>"
+
+	var path_a: String = _resolve_diff_path(str(args[0]))
+	var path_b: String = _resolve_diff_path(str(args[1]))
+	if not FileAccess.file_exists(path_a):
+		return "Error: File not found: %s" % path_a
+	if not FileAccess.file_exists(path_b):
+		return "Error: File not found: %s" % path_b
+
+	var fa := FileAccess.open(path_a, FileAccess.READ)
+	if not fa:
+		return "Error: Cannot read file: %s" % path_a
+	var content_a: String = fa.get_as_text()
+	fa.close()
+	var fb := FileAccess.open(path_b, FileAccess.READ)
+	if not fb:
+		return "Error: Cannot read file: %s" % path_b
+	var content_b: String = fb.get_as_text()
+	fb.close()
+
+	var lines_a: PackedStringArray = content_a.split("\n")
+	var lines_b: PackedStringArray = content_b.split("\n")
+	var max_len: int = max(lines_a.size(), lines_b.size())
+
+	var out: Array[String] = []
+	for i in range(max_len):
+		var has_a: bool = i < lines_a.size()
+		var has_b: bool = i < lines_b.size()
+		if has_a and has_b:
+			var la: String = lines_a[i]
+			var lb: String = lines_b[i]
+			if la == lb:
+				out.append("  " + la)
+			else:
+				out.append("[color=#FF4444]- %s[/color]" % la)
+				out.append("[color=#44FF44]+ %s[/color]" % lb)
+		elif has_a:
+			out.append("[color=#FF4444]- %s[/color]" % lines_a[i])
+		else:
+			out.append("[color=#44FF44]+ %s[/color]" % lines_b[i])
+	return "\n".join(out)
+
+func _resolve_diff_path(p: String) -> String:
+	var s: String = p.strip_edges()
+	if s.begins_with("res://") or s.begins_with("user://") or s.begins_with("/"):
+		return s
+	return current_directory.path_join(s)
+
+#endregion
+
+#region Output renderer helpers
+
+const _DC_COLOR_PATH := "#5FBEE0"
+const _DC_COLOR_NUMBER := "#F7DC6F"
+const _DC_COLOR_ERROR_TOKEN := "#FF4444"
+const _DC_COLOR_WARNING_TOKEN := "#FFAA00"
+const _DC_COLOR_STRING := "#A0E0A0"
+const _DC_COLOR_BOOLEAN := "#D670D6"
+const _DC_COLOR_NULL := "#606060"
+const _DC_COLOR_BRACKET := "#FFD700"
+const _DC_COLOR_KEYWORD := "#FF6B9D"
+
+const _DC_KEYWORDS: Array = [
+	"func", "var", "const", "signal", "class_name", "extends", "enum",
+	"return", "if", "else", "for", "while", "match",
+	"pass", "break", "continue", "self", "super",
+]
+
+# Pretty-print arbitrary JSON. Reads input from `input` when piped, otherwise
+# joins the positional args with spaces so `json {"a":1,"b":2}` works after
+# the shell tokenizer splits on whitespace inside the braces.
+func _cmd_json(args: Array, input: String = "", is_pipe_context: bool = false) -> String:
+	var raw: String = ""
+	if is_pipe_context and not input.is_empty():
+		raw = input
+	elif args.size() > 0:
+		var parts: Array = []
+		for a in args:
+			parts.append(str(a))
+		raw = " ".join(parts)
+	raw = raw.strip_edges()
+	if raw.is_empty():
+		return "Usage: json <text> (or pipe input)"
+	# Use the JSON instance API instead of `JSON.parse_string` so we can
+	# distinguish "input is the literal `null`" (valid) from "parse failed"
+	# (returns null too). parse_string can't tell those apart.
+	var parser: JSON = JSON.new()
+	var err: int = parser.parse(raw)
+	if err != OK:
+		return "Error: invalid JSON"
+	return JSON.stringify(parser.data, "  ")
+
+# Public test entry point. Self-contained - does not depend on _registry,
+# _core, or any node tree. Safe to call from `BuiltInCommands.new()`.
+func _colorize_message(message: String) -> String:
+	# Pre-colored caller - early-return so we never layer a second category
+	# color on top of the caller's choice. This also prevents accidentally
+	# matching hex digits inside an existing [color=#...] tag as numbers.
+	if message.contains("[color="):
+		return message
+	if message.is_empty():
+		return message
+
+	var edits: Array = []
+	var skip_ranges: Array = []
+
+	var prefix_edit: Array = _dc_detect_error_warning_prefix(message)
+	if prefix_edit.size() == 3:
+		edits.append(prefix_edit)
+		skip_ranges.append([int(prefix_edit[0]), int(prefix_edit[1])])
+
+	_dc_detect_paths(message, edits, skip_ranges)
+	_dc_detect_strings(message, edits, skip_ranges)
+	_dc_detect_brackets(message, edits, skip_ranges)
+	_dc_detect_numbers(message, edits, skip_ranges)
+	_dc_detect_word_tokens(message, ["true", "false"], _DC_COLOR_BOOLEAN, edits, skip_ranges, true)
+	_dc_detect_word_tokens(message, ["null"], _DC_COLOR_NULL, edits, skip_ranges, true)
+	_dc_detect_word_tokens(message, _DC_KEYWORDS, _DC_COLOR_KEYWORD, edits, skip_ranges, true)
+
+	edits.sort_custom(func(a, b): return int(a[0]) > int(b[0]))
+	var result: String = message
+	for e in edits:
+		var start: int = int(e[0])
+		var end_pos: int = int(e[1])
+		var repl: String = str(e[2])
+		result = result.substr(0, start) + repl + result.substr(end_pos)
+	return result
+
+func _dc_detect_error_warning_prefix(message: String) -> Array:
+	var candidates: Array = [
+		{"token": "Error", "color": _DC_COLOR_ERROR_TOKEN},
+		{"token": "ERROR", "color": _DC_COLOR_ERROR_TOKEN},
+		{"token": "Warning", "color": _DC_COLOR_WARNING_TOKEN},
+		{"token": "WARNING", "color": _DC_COLOR_WARNING_TOKEN},
+	]
+	for c in candidates:
+		var token: String = str(c["token"])
+		if not message.begins_with(token):
+			continue
+		var after: int = token.length()
+		if after < message.length() and _dc_is_word_char(message[after]):
+			continue
+		return [0, after, "[color=%s]%s[/color]" % [str(c["color"]), token]]
+	return []
+
+func _dc_detect_paths(message: String, edits: Array, skip_ranges: Array) -> void:
+	var prefixes: Array = ["res://", "user://"]
+	var i: int = 0
+	var n: int = message.length()
+	while i < n:
+		var matched_prefix: String = ""
+		for p in prefixes:
+			if message.substr(i, p.length()) == p:
+				matched_prefix = p
+				break
+		if matched_prefix.is_empty():
+			i += 1
+			continue
+		var end_pos: int = i + matched_prefix.length()
+		while end_pos < n and _dc_is_path_char(message[end_pos]):
+			end_pos += 1
+		# Bail if we didn't capture at least one trailing char - bare `res://`
+		# is technically syntax but not a useful link.
+		if end_pos == i + matched_prefix.length():
+			i = end_pos
+			continue
+		var path: String = message.substr(i, end_pos - i)
+		edits.append([i, end_pos, "[color=%s]%s[/color]" % [_DC_COLOR_PATH, path]])
+		skip_ranges.append([i, end_pos])
+		i = end_pos
+
+# Walks the message and wraps the next matching `"..."` or `'...'` pair in
+func _dc_detect_strings(message: String, edits: Array, skip_ranges: Array) -> void:
+	var n: int = message.length()
+	var i: int = 0
+	while i < n:
+		if _dc_is_in_skip_range(i, skip_ranges):
+			i += 1
+			continue
+		var c: String = message[i]
+		if c != "\"" and c != "'":
+			i += 1
+			continue
+		var close: int = i + 1
+		while close < n and message[close] != c:
+			close += 1
+		# Unmatched opening quote - bail and keep scanning.
+		if close >= n:
+			i += 1
+			continue
+		var span_end: int = close + 1
+		var token: String = message.substr(i, span_end - i)
+		edits.append([i, span_end, "[color=%s]%s[/color]" % [_DC_COLOR_STRING, token]])
+		skip_ranges.append([i, span_end])
+		i = span_end
+
+# Single-char detector for grouping symbols. Brackets get their own yellow
+func _dc_detect_brackets(message: String, edits: Array, skip_ranges: Array) -> void:
+	var n: int = message.length()
+	for i in n:
+		if _dc_is_in_skip_range(i, skip_ranges):
+			continue
+		var c: String = message[i]
+		if c == "{" or c == "}" or c == "[" or c == "]" or c == "(" or c == ")":
+			edits.append([i, i + 1, "[color=%s]%s[/color]" % [_DC_COLOR_BRACKET, c]])
+
+func _dc_detect_numbers(message: String, edits: Array, skip_ranges: Array) -> void:
+	var units: Array = ["ms", "s", "KB", "MB", "GB", "%"]
+	var n: int = message.length()
+	var i: int = 0
+	while i < n:
+		if not _dc_is_digit(message[i]):
+			i += 1
+			continue
+		if _dc_is_in_skip_range(i, skip_ranges):
+			i += 1
+			continue
+		if i > 0 and _dc_is_word_char(message[i - 1]):
+			i += 1
+			continue
+		var start: int = i
+		while i < n and _dc_is_digit(message[i]):
+			i += 1
+		if i < n - 1 and message[i] == "." and _dc_is_digit(message[i + 1]):
+			i += 1
+			while i < n and _dc_is_digit(message[i]):
+				i += 1
+		var unit_end: int = i
+		var best_unit_len: int = 0
+		for u in units:
+			var ulen: int = str(u).length()
+			if message.substr(i, ulen) == str(u) and ulen > best_unit_len:
+				best_unit_len = ulen
+		if best_unit_len > 0:
+			unit_end = i + best_unit_len
+		if unit_end < n and _dc_is_word_char(message[unit_end]):
+			# Trailing word char like `42abc` - reject the whole token to
+			# avoid visually splitting an identifier.
+			i = unit_end
+			while i < n and _dc_is_word_char(message[i]):
+				i += 1
+			continue
+		i = unit_end
+		var token: String = message.substr(start, i - start)
+		edits.append([start, i, "[color=%s]%s[/color]" % [_DC_COLOR_NUMBER, token]])
+
+# Word-bounded multi-token detector. Used by booleans, null, and keywords.
+func _dc_detect_word_tokens(message: String, tokens: Array, color: String, edits: Array, skip_ranges: Array, claim_skip: bool) -> void:
+	var n: int = message.length()
+	var i: int = 0
+	while i < n:
+		if _dc_is_in_skip_range(i, skip_ranges):
+			i += 1
+			continue
+		if i > 0 and _dc_is_word_char(message[i - 1]):
+			i += 1
+			continue
+		var matched_len: int = 0
+		var matched_token: String = ""
+		for t in tokens:
+			var ts: String = str(t)
+			var tlen: int = ts.length()
+			if tlen <= matched_len:
+				continue
+			if i + tlen > n:
+				continue
+			if message.substr(i, tlen) != ts:
+				continue
+			if i + tlen < n and _dc_is_word_char(message[i + tlen]):
+				continue
+			matched_len = tlen
+			matched_token = ts
+		if matched_len == 0:
+			i += 1
+			continue
+		var end_pos: int = i + matched_len
+		edits.append([i, end_pos, "[color=%s]%s[/color]" % [color, matched_token]])
+		if claim_skip:
+			skip_ranges.append([i, end_pos])
+		i = end_pos
+
+func _dc_is_path_char(c: String) -> bool:
+	if c.length() != 1:
+		return false
+	if _dc_is_word_char(c):
+		return true
+	return c == "-" or c == "." or c == "/"
+
+func _dc_is_word_char(c: String) -> bool:
+	if c.length() != 1:
+		return false
+	if _dc_is_digit(c):
+		return true
+	if c == "_":
+		return true
+	var ch: int = c.unicode_at(0)
+	return (ch >= 65 and ch <= 90) or (ch >= 97 and ch <= 122)
+
+func _dc_is_digit(c: String) -> bool:
+	if c.length() != 1:
+		return false
+	var ch: int = c.unicode_at(0)
+	return ch >= 48 and ch <= 57
+
+func _dc_is_in_skip_range(idx: int, ranges: Array) -> bool:
+	for r in ranges:
+		if idx >= int(r[0]) and idx < int(r[1]):
+			return true
+	return false
+
+# Human-readable millisecond duration. Helper for benchmark/timer output;
+func _format_duration_ms(ms: int) -> String:
+	if ms < 0:
+		ms = 0
+	if ms < 1000:
+		return "%dms" % ms
+	if ms < 60000:
+		return "%.1fs" % (ms / 1000.0)
+	var total_seconds: int = ms / 1000
+	var minutes: int = total_seconds / 60
+	var seconds: int = total_seconds % 60
+	return "%dm%ds" % [minutes, seconds]
+#endregion
+
+#region New commands
+
+# REPL using the sandboxed Expression class. Cannot define functions or
+# assign variables, but supports literals, operators, constructors, autoload
+# refs, and (at runtime) `get_node("/root/...")` via the SceneTree root as
+# base instance.
+func _cmd_eval(args: Array) -> String:
+	if args.is_empty():
+		return "Usage: eval <gdscript expression>"
+	var code: String = " ".join(args).strip_edges()
+	if code.is_empty():
+		return "Usage: eval <gdscript expression>"
+	var expr := Expression.new()
+	var err: int = expr.parse(code)
+	if err != OK:
+		return "Error: parse failed - " + expr.get_error_text()
+	var base_instance: Object = null
+	if not Engine.is_editor_hint():
+		var tree := Engine.get_main_loop() as SceneTree
+		if tree:
+			base_instance = tree.root
+	var result: Variant = expr.execute([], base_instance, false)
+	if expr.has_execute_failed():
+		return "Error: execute failed - " + expr.get_error_text()
+	if result == null:
+		return "null"
+	return str(result)
+
+# Performance.Monitor dashboard. Groups monitors into categories with
+# BBCode-colored headers. Optional first arg filters by case-insensitive
+# substring match against the display name.
+func _cmd_perf(args: Array) -> String:
+	var groups: Array = _dc_perf_monitor_groups()
+	var filter: String = ""
+	if args.size() > 0:
+		filter = str(args[0]).strip_edges().to_lower()
+
+	var lines: Array[String] = []
+	var matched_any: bool = false
+	for group in groups:
+		var category: String = group[0]
+		var monitors: Array = group[1]
+		var category_lines: Array[String] = []
+		for mon in monitors:
+			var enum_val: int = int(mon[0])
+			var display_name: String = String(mon[1])
+			var unit: String = String(mon[2])
+			var multiplier: float = float(mon[3]) if mon.size() > 3 else 1.0
+			if not filter.is_empty() and not display_name.to_lower().contains(filter):
+				continue
+			var raw_value: float = 0.0
+			# Performance.get_monitor() returns 0.0 for unsupported monitors
+			# in headless or older builds; we still display them rather than
+			# hide because zero is itself informative for most monitors.
+			raw_value = Performance.get_monitor(enum_val)
+			var formatted: String = _dc_format_perf_value(raw_value * multiplier, unit)
+			category_lines.append("  %-42s = [color=#F7DC6F]%s[/color]" % [display_name, formatted])
+			matched_any = true
+		if not category_lines.is_empty():
+			lines.append("[color=#5FBEE0]== %s ==[/color]" % category)
+			lines.append_array(category_lines)
+	if not matched_any:
+		return "No performance monitors matched filter: %s" % filter
+	return "\n".join(lines)
+
+func _dc_perf_monitor_groups() -> Array:
+	# Each row: [enum_value, display_name, unit_suffix, optional_multiplier]
+	# Time monitors are seconds internally; multiplier 1000.0 converts to ms.
+	return [
+		["Time", [
+			[Performance.TIME_FPS, "FPS", ""],
+			[Performance.TIME_PROCESS, "Process Time", "ms", 1000.0],
+			[Performance.TIME_PHYSICS_PROCESS, "Physics Process Time", "ms", 1000.0],
+			[Performance.TIME_NAVIGATION_PROCESS, "Navigation Process Time", "ms", 1000.0],
+		]],
+		["Memory", [
+			[Performance.MEMORY_STATIC, "Static Memory", "B"],
+			[Performance.MEMORY_STATIC_MAX, "Static Memory Peak", "B"],
+			[Performance.MEMORY_MESSAGE_BUFFER_MAX, "Message Buffer Peak", "B"],
+		]],
+		["Object", [
+			[Performance.OBJECT_COUNT, "Object Count", ""],
+			[Performance.OBJECT_RESOURCE_COUNT, "Resource Count", ""],
+			[Performance.OBJECT_NODE_COUNT, "Node Count", ""],
+			[Performance.OBJECT_ORPHAN_NODE_COUNT, "Orphan Node Count", ""],
+		]],
+		["Render", [
+			[Performance.RENDER_TOTAL_OBJECTS_IN_FRAME, "Objects in Frame", ""],
+			[Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME, "Primitives in Frame", ""],
+			[Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME, "Draw Calls in Frame", ""],
+			[Performance.RENDER_VIDEO_MEM_USED, "Video Memory", "B"],
+			[Performance.RENDER_TEXTURE_MEM_USED, "Texture Memory", "B"],
+			[Performance.RENDER_BUFFER_MEM_USED, "Buffer Memory", "B"],
+		]],
+		["Physics", [
+			[Performance.PHYSICS_2D_ACTIVE_OBJECTS, "2D Active Objects", ""],
+			[Performance.PHYSICS_2D_COLLISION_PAIRS, "2D Collision Pairs", ""],
+			[Performance.PHYSICS_2D_ISLAND_COUNT, "2D Islands", ""],
+			[Performance.PHYSICS_3D_ACTIVE_OBJECTS, "3D Active Objects", ""],
+			[Performance.PHYSICS_3D_COLLISION_PAIRS, "3D Collision Pairs", ""],
+			[Performance.PHYSICS_3D_ISLAND_COUNT, "3D Islands", ""],
+		]],
+		["Audio", [
+			[Performance.AUDIO_OUTPUT_LATENCY, "Audio Output Latency", "s"],
+		]],
+		["Navigation", [
+			[Performance.NAVIGATION_ACTIVE_MAPS, "Navigation Active Maps", ""],
+			[Performance.NAVIGATION_REGION_COUNT, "Navigation Regions", ""],
+			[Performance.NAVIGATION_AGENT_COUNT, "Navigation Agents", ""],
+			[Performance.NAVIGATION_LINK_COUNT, "Navigation Links", ""],
+			[Performance.NAVIGATION_POLYGON_COUNT, "Navigation Polygons", ""],
+			[Performance.NAVIGATION_EDGE_COUNT, "Navigation Edges", ""],
+			[Performance.NAVIGATION_EDGE_MERGE_COUNT, "Navigation Merged Edges", ""],
+			[Performance.NAVIGATION_EDGE_CONNECTION_COUNT, "Navigation Connections", ""],
+			[Performance.NAVIGATION_EDGE_FREE_COUNT, "Navigation Free Edges", ""],
+		]],
+		["Pipeline", [
+			[Performance.PIPELINE_COMPILATIONS_CANVAS, "Canvas Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_MESH, "Mesh Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_SURFACE, "Surface Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_DRAW, "Draw Pipeline Compilations", ""],
+			[Performance.PIPELINE_COMPILATIONS_SPECIALIZATION, "Specialization Pipeline Compilations", ""],
+		]],
+	]
+
+func _dc_format_perf_value(value: float, unit: String) -> String:
+	if unit == "B":
+		return _dc_format_bytes(value)
+	if unit == "ms":
+		return "%.2f ms" % value
+	if unit == "s":
+		return "%.4f s" % value
+	# Integer-friendly display for counts/FPS where fractional parts are noise.
+	if absf(value - round(value)) < 0.0001:
+		return "%d" % int(round(value))
+	return "%.2f" % value
+
+func _dc_format_bytes(bytes: float) -> String:
+	var b: float = bytes
+	if b < 1024.0:
+		return "%d B" % int(b)
+	if b < 1024.0 * 1024.0:
+		return "%.1f KiB" % (b / 1024.0)
+	if b < 1024.0 * 1024.0 * 1024.0:
+		return "%.2f MiB" % (b / (1024.0 * 1024.0))
+	return "%.2f GiB" % (b / (1024.0 * 1024.0 * 1024.0))
+
+# Toggle CollisionShape debug rendering. Editor-mode is rejected because
+# enabling it on the editor's SceneTree would affect the editor viewport, not
+# the running game. Nodes redraw their debug shapes on the next physics step.
+func _cmd_show_colliders(args: Array) -> String:
+	return _dc_toggle_scene_tree_flag(args, "debug_collisions_hint", "Collision shape rendering", "show_colliders")
+
+func _cmd_show_nav(args: Array) -> String:
+	return _dc_toggle_scene_tree_flag(args, "debug_navigation_hint", "Navigation polygon rendering", "show_nav")
+
+func _cmd_show_paths(args: Array) -> String:
+	return _dc_toggle_scene_tree_flag(args, "debug_paths_hint", "Path rendering", "show_paths")
+
+func _dc_toggle_scene_tree_flag(args: Array, flag_name: String, label: String, cmd_name: String) -> String:
+	if Engine.is_editor_hint():
+		return "Error: %s only works in runtime" % cmd_name
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return "Error: %s requires an active SceneTree" % cmd_name
+	var current: bool = bool(tree.get(flag_name))
+	var target: bool = not current
+	if args.size() > 0:
+		var sub: String = str(args[0]).strip_edges().to_lower()
+		match sub:
+			"on", "true", "1", "yes":
+				target = true
+			"off", "false", "0", "no":
+				target = false
+			_:
+				return "Usage: %s [on|off]" % cmd_name
+	tree.set(flag_name, target)
+	return "%s: %s" % [label, ("ON" if target else "OFF")]
+
+# Colored timestamped sync marker. Useful for matching console output
+# against external recordings, log dumps, or screen captures.
+func _cmd_mark(args: Array) -> String:
+	var label: String = " ".join(args).strip_edges()
+	if label.is_empty():
+		label = "MARK"
+	var ts: String = Time.get_time_string_from_system()
+	return "[color=#FFD700]===== %s ===== %s ===== %s =====[/color]" % [ts, label, ts]
+
+# Slow-motion shortcut. `slowmo` defaults to 0.25; `slowmo off` resets to
+# 1.0. Negative or zero values are rejected (use `freeze` for 0.0).
+func _cmd_slowmo(args: Array) -> String:
+	if Engine.is_editor_hint():
+		return "Error: slowmo only works in runtime"
+	if args.size() > 0:
+		var sub: String = str(args[0]).strip_edges().to_lower()
+		if sub == "off" or sub == "reset":
+			Engine.time_scale = 1.0
+			return "Time scale: 1.0 (normal speed)"
+		if not sub.is_valid_float():
+			return "Error: slowmo expects a positive number or 'off', got: %s" % sub
+		var factor: float = sub.to_float()
+		if factor <= 0.0:
+			return "Error: slowmo factor must be > 0 (use 'freeze' for 0)"
+		Engine.time_scale = factor
+		return "Time scale: %.3f (slow motion)" % factor
+	Engine.time_scale = 0.25
+	return "Time scale: 0.25 (slow motion)"
+
+# Freeze time without using the pause flag. Useful for inspecting a live
+# scene without disabling _process callbacks that depend on time_scale.
+func _cmd_freeze(args: Array) -> String:
+	if Engine.is_editor_hint():
+		return "Error: freeze only works in runtime"
+	Engine.time_scale = 0.0
+	return "Time scale: 0.0 (frozen). Use 'timescale 1.0' or 'slowmo off' to resume."
+
+# Get/set the physics tick rate. Valid range 1-1000 matches Godot's own
+# project setting bounds. Reading is allowed in editor mode; writing is too,
+# since Engine.physics_ticks_per_second has no SceneTree dependency.
+func _cmd_physics_tps(args: Array) -> String:
+	if args.is_empty():
+		return "Physics TPS: %d" % Engine.physics_ticks_per_second
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_int():
+		return "Error: physics_tps takes an integer"
+	var n: int = raw.to_int()
+	if n < 1 or n > 1000:
+		return "Error: physics_tps must be between 1 and 1000, got: %d" % n
+	Engine.physics_ticks_per_second = n
+	return "Physics TPS: %d" % Engine.physics_ticks_per_second
+
+# Fire assert(false) to validate crash reporting. In debug builds the
+# assert halts execution; in release builds assert is a no-op and only the
+# returned string is observable.
+func _cmd_crashtest(args: Array) -> String:
+	var msg: String = "Crashtest fired. If you see this in the console but no crash, asserts are disabled in release mode."
+	assert(false, "crashtest fired via debug console")
+	return msg
+
+# Live font-size tuning for the console output panels. Walks both the editor
+func _cmd_font_size(args: Array) -> String:
+	if args.is_empty():
+		var current_editor: int = _get_console_font_size("EditorConsole")
+		var current_game: int = _get_console_font_size("GameConsole")
+		var lines: Array[String] = []
+		if current_editor > 0:
+			lines.append("Editor console: %d px" % current_editor)
+		if current_game > 0:
+			lines.append("Game console: %d px" % current_game)
+		if lines.is_empty():
+			return "No console found to query."
+		return "\n".join(lines)
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_int():
+		return "Error: font_size takes an integer 8-32"
+	var n: int = raw.to_int()
+	if n < 8 or n > 32:
+		return "Error: font_size must be between 8 and 32 (got %d)" % n
+	var applied: Array[String] = []
+	if _apply_console_font_size("EditorConsole", n):
+		applied.append("editor")
+	if _apply_console_font_size("GameConsole", n):
+		applied.append("game")
+	if applied.is_empty():
+		return "Error: no console found to apply font_size to"
+	return "[color=#A0E0A0]Font size set to %d px (%s)[/color]" % [n, ", ".join(applied)]
+
+func _get_console_font_size(group_name: String) -> int:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return 0
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for n in nodes:
+		var out: Node = n.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = n.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out and out.has_theme_font_size_override("normal_font_size"):
+			return out.get_theme_font_size("normal_font_size")
+	return 0
+
+func _apply_console_font_size(group_name: String, n: int) -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return false
+	var any_applied: bool = false
+	# Per-spacing scale: line_separation roughly 2/3 of font_size keeps the
+	# bash-terminal feel across sizes without overspacing at high values.
+	var line_sep: int = max(4, int(round(float(n) * 0.66)))
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for node_ref in nodes:
+		var out: Node = node_ref.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = node_ref.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out:
+			out.add_theme_font_size_override("normal_font_size", n)
+			out.add_theme_constant_override("line_separation", line_sep)
+			any_applied = true
+		var input_node: Node = node_ref.get_node_or_null("VBox/InputContainer/InputLine")
+		if not input_node:
+			input_node = node_ref.get_node_or_null("VBox/InputLine")
+		if input_node and input_node is Control:
+			input_node.add_theme_font_size_override("font_size", n)
+	return any_applied
+
+# Live line-spacing tuning. The font_size command bumps line_separation as a
+# side effect, but the user may want to tune it independently (for example
+# to add extra breathing room with a small font, or tighten high-DPI text).
+func _cmd_line_spacing(args: Array) -> String:
+	if args.is_empty():
+		var current_editor: int = _get_console_line_separation("EditorConsole")
+		var current_game: int = _get_console_line_separation("GameConsole")
+		var lines: Array[String] = []
+		if current_editor >= 0:
+			lines.append("Editor console: %d px" % current_editor)
+		if current_game >= 0:
+			lines.append("Game console: %d px" % current_game)
+		if lines.is_empty():
+			return "No console found to query."
+		return "\n".join(lines)
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_int():
+		return "Error: line_spacing takes an integer 0-40"
+	var n: int = raw.to_int()
+	if n < 0 or n > 40:
+		return "Error: line_spacing must be between 0 and 40 (got %d)" % n
+	var applied: Array[String] = []
+	if _apply_console_line_separation("EditorConsole", n):
+		applied.append("editor")
+	if _apply_console_line_separation("GameConsole", n):
+		applied.append("game")
+	if applied.is_empty():
+		return "Error: no console found to apply line_spacing to"
+	return "[color=#A0E0A0]Line spacing set to %d px (%s)[/color]" % [n, ", ".join(applied)]
+
+func _get_console_line_separation(group_name: String) -> int:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return -1
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for n in nodes:
+		var out: Node = n.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = n.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out and out.has_theme_constant_override("line_separation"):
+			return out.get_theme_constant("line_separation")
+	return -1
+
+func _apply_console_line_separation(group_name: String, n: int) -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return false
+	var any_applied: bool = false
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for node_ref in nodes:
+		var out: Node = node_ref.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = node_ref.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out:
+			out.add_theme_constant_override("line_separation", n)
+			any_applied = true
+	return any_applied
 
 #endregion
