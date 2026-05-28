@@ -188,6 +188,7 @@ func register_universal_commands():
 	_registry.register_command("crashtest", _cmd_crashtest, "Fire assert(false) to validate crash reporting", "both")
 	# Live font-size tuning (user feedback: default too small).
 	_registry.register_command("font_size", _cmd_font_size, "Get/set console font size: font_size [n] (8-32, default 15)", "both")
+	_registry.register_command("line_spacing", _cmd_line_spacing, "Get/set console line spacing in pixels: line_spacing [n] (0-40)", "both")
 	# T6 - Load external command modules (scene/runtime/UI). Modules are kept
 	# alive in a static array; on a fresh registry we re-register against it.
 	if _t6_keepalive.is_empty():
@@ -2786,6 +2787,64 @@ func _apply_console_font_size(group_name: String, n: int) -> bool:
 			input_node = node_ref.get_node_or_null("VBox/InputLine")
 		if input_node and input_node is Control:
 			input_node.add_theme_font_size_override("font_size", n)
+	return any_applied
+
+# Live line-spacing tuning. The font_size command bumps line_separation as a
+# side effect, but the user may want to tune it independently (for example
+# to add extra breathing room with a small font, or tighten high-DPI text).
+func _cmd_line_spacing(args: Array) -> String:
+	if args.is_empty():
+		var current_editor: int = _get_console_line_separation("EditorConsole")
+		var current_game: int = _get_console_line_separation("GameConsole")
+		var lines: Array[String] = []
+		if current_editor >= 0:
+			lines.append("Editor console: %d px" % current_editor)
+		if current_game >= 0:
+			lines.append("Game console: %d px" % current_game)
+		if lines.is_empty():
+			return "No console found to query."
+		return "\n".join(lines)
+	var raw: String = str(args[0]).strip_edges()
+	if not raw.is_valid_int():
+		return "Error: line_spacing takes an integer 0-40"
+	var n: int = raw.to_int()
+	if n < 0 or n > 40:
+		return "Error: line_spacing must be between 0 and 40 (got %d)" % n
+	var applied: Array[String] = []
+	if _apply_console_line_separation("EditorConsole", n):
+		applied.append("editor")
+	if _apply_console_line_separation("GameConsole", n):
+		applied.append("game")
+	if applied.is_empty():
+		return "Error: no console found to apply line_spacing to"
+	return "[color=#A0E0A0]Line spacing set to %d px (%s)[/color]" % [n, ", ".join(applied)]
+
+func _get_console_line_separation(group_name: String) -> int:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return -1
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for n in nodes:
+		var out: Node = n.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = n.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out and out.has_theme_constant_override("line_separation"):
+			return out.get_theme_constant("line_separation")
+	return -1
+
+func _apply_console_line_separation(group_name: String, n: int) -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	if not tree:
+		return false
+	var any_applied: bool = false
+	var nodes: Array[Node] = tree.get_nodes_in_group(group_name)
+	for node_ref in nodes:
+		var out: Node = node_ref.get_node_or_null("VBox/OutputText")
+		if not out:
+			out = node_ref.get_node_or_null("VBox/OutputPanel/OutputText")
+		if out:
+			out.add_theme_constant_override("line_separation", n)
+			any_applied = true
 	return any_applied
 
 #endregion

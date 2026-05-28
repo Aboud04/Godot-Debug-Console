@@ -148,9 +148,12 @@ func _setup_ui():
 	output_text.add_theme_color_override("default_color", Color("#F0F0F0"))
 	# Bumped from 14 -> 16. Tunable at runtime via the `font_size` command.
 	output_text.add_theme_font_size_override("normal_font_size", 16)
-	# Bumped from 5 -> 12 (user screenshot still showed overlap at 5). 12 gives
-	# clear vertical separation at 16px font.
-	output_text.add_theme_constant_override("line_separation", 12)
+	# Bumped progressively (5 -> 12 -> 20) as the user kept seeing overlap.
+	# Zero out text_highlight_v_padding for the same reason as the editor
+	# console: BBCode color spans add vertical extent that needs explicit
+	# clearing in addition to line_separation.
+	output_text.add_theme_constant_override("line_separation", 20)
+	output_text.add_theme_constant_override("text_highlight_v_padding", 0)
 	
 	input_line.placeholder_text = "Enter command... (F12 to close)"
 	# W1: blinking caret so the input always feels "alive" - Godot defaults

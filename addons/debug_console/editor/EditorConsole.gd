@@ -145,10 +145,13 @@ func _ready():
 	# Bumped from 13 -> 15 (user feedback: too small to read). Tunable at
 	# runtime via the `font_size` command.
 	output_text.add_theme_font_size_override("normal_font_size", 15)
-	# Bumped from 4 -> 10 (user screenshot still showed BBCode color tag glow
-	# bleeding between lines at 4). 10 gives clear separation matching iTerm
-	# at this font size.
-	output_text.add_theme_constant_override("line_separation", 10)
+	# Bumped progressively (4 -> 10 -> 18) as the user kept seeing overlap.
+	# At Godot's default font with 15px size, BBCode color spans appear to add
+	# vertical extent that needs ~18px of breathing room to clear adjacent lines.
+	# Also zero out text_highlight_v_padding so the [color=...] span box does
+	# not contribute extra height of its own.
+	output_text.add_theme_constant_override("line_separation", 18)
+	output_text.add_theme_constant_override("text_highlight_v_padding", 0)
 	var output_panel: Panel = output_text.get_parent() as Panel
 	if output_panel:
 		var sb := StyleBoxFlat.new()
