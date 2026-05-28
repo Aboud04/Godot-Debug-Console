@@ -15,7 +15,7 @@ const _COLOR_PATH := "#5FBEE0"
 const _COLOR_SUCCESS := "#A0E0A0"
 const _COLOR_NUMBER := "#F7DC6F"
 
-const _PROJECT_FILES: PackedStringArray = PackedStringArray([
+const _PROJECT_FILES: PackedStringArray = [
 	"res://project.godot",
 	"res://icon.svg",
 	"res://icon.png",
@@ -23,7 +23,7 @@ const _PROJECT_FILES: PackedStringArray = PackedStringArray([
 	"res://AGENTS.md",
 	"res://CLAUDE.md",
 	"res://.gdignore",
-])
+]
 
 const _MAX_ZIP_ENTRY_BYTES: int = 64 * 1024 * 1024
 
