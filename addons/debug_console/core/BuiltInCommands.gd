@@ -222,7 +222,30 @@ func register_universal_commands():
 					push_error("Debug Console: %s loaded but .new() failed" % path)
 			else:
 				push_error("Debug Console: failed to load module %s" % path)
+	# T8 extensions auto-discovery. Any *Commands.gd dropped into
+	# core/extensions/ at addon ship time is picked up automatically. Each is
+	# instantiated once per plugin lifetime and kept alive in the static
+	# _t8_extensions array (separate from _t6_keepalive so the size-mismatch
+	# guard above doesn't false-alarm when an extension count changes).
+	if _t8_extensions.is_empty():
+		var ext_dir := DirAccess.open("res://addons/debug_console/core/extensions")
+		if ext_dir:
+			ext_dir.list_dir_begin()
+			var file_name: String = ext_dir.get_next()
+			while not file_name.is_empty():
+				if file_name.ends_with("Commands.gd"):
+					var ext_path := "res://addons/debug_console/core/extensions/%s" % file_name
+					var ext_script: GDScript = load(ext_path) as GDScript
+					if ext_script:
+						var ext_module: RefCounted = ext_script.new()
+						if ext_module:
+							_t8_extensions.append(ext_module)
+				file_name = ext_dir.get_next()
+			ext_dir.list_dir_end()
 	for module in _t6_keepalive:
+		if module and module.has_method("register_commands"):
+			module.register_commands(_registry, _core)
+	for module in _t8_extensions:
 		if module and module.has_method("register_commands"):
 			module.register_commands(_registry, _core)
 	_load_aliases_from_config()
@@ -703,6 +726,10 @@ static var global_current_directory: String = "res://"
 # still gets re-registered on the next call (modules are stateless w.r.t.
 # the registry identity).
 static var _t6_keepalive: Array = []
+# T8 extensions: auto-discovered modules in core/extensions/. Separate from
+# _t6_keepalive so the size-mismatch hot-reload guard above does not false-alarm
+# when an extension is added or removed.
+static var _t8_extensions: Array = []
 
 static func get_current_directory() -> String:
 	return global_current_directory
