@@ -113,7 +113,7 @@ func _cmd_fmt_dir(args: Array, piped_input: String = "") -> String:
 		var step1 := _apply_tabs(src)
 		var step2 := _apply_strip_trailing(step1.text)
 		var step3 := _apply_blanks(step2.text)
-		var any_change := step1.changed or step2.changed or step3.changed
+		var any_change: bool = bool(step1.changed) or bool(step2.changed) or bool(step3.changed)
 		if not any_change:
 			skipped += 1
 			continue
